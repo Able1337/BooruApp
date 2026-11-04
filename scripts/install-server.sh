@@ -4,9 +4,10 @@ set -euo pipefail
 umask 027
 cd "$(dirname "$0")/.."
 site_domain="${1:-frank.eben-cord.ru}"
-site_port="${2:-8443}"
-if [[ ! "$site_port" =~ ^[0-9]+$ ]] || ((site_port < 1024 || site_port > 65535)); then echo 'Invalid HTTPS port.' >&2; exit 1; fi
-site_origin="https://$site_domain:$site_port"
+site_port="${2:-443}"
+if [[ ! "$site_port" =~ ^[0-9]+$ ]] || (( (site_port < 1024 && site_port != 443) || site_port > 65535)); then echo 'Invalid HTTPS port.' >&2; exit 1; fi
+site_origin="https://$site_domain"
+if [[ "$site_port" != 443 ]]; then site_origin+=":$site_port"; fi
 if [[ "$EUID" -ne 0 ]]; then echo 'Run as root.' >&2; exit 1; fi
 if [[ ! "$site_domain" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ || "$site_domain" != *.* ]]; then echo 'Invalid domain.' >&2; exit 1; fi
 if ! command -v apt-get >/dev/null; then echo 'This installer supports Debian/Ubuntu with systemd.' >&2; exit 1; fi
@@ -71,7 +72,7 @@ UMask=0077
 [Install]
 WantedBy=multi-user.target
 UNIT
-# Serve certificate challenges on HTTP; never bind the existing VPN's 443 port.
+# Serve certificate challenges on HTTP before enabling HTTPS.
 mkdir -p /var/lib/booru-pocket/acme
 chmod 755 /var/lib/booru-pocket /var/lib/booru-pocket/acme
 cat > "$site_config" <<NGINX
@@ -98,7 +99,7 @@ if ! curl -fsS http://127.0.0.1:18737/healthz; then
  exit 1
 fi
 systemctl reload nginx
-# DNS A/AAAA must point here. Keep the existing VPN service on 443.
+# DNS A/AAAA must point here.
 if command -v ufw >/dev/null && ufw status | grep -q 'Status: active'; then
  ufw allow 80/tcp
  ufw allow "$site_port/tcp"
