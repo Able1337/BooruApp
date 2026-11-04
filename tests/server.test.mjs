@@ -10,7 +10,7 @@ test('server proxy only accepts bounded post-list requests to supported HTTPS AP
 });
 test('same-origin server API, static mode, upstream failures and credential privacy',async t=>{
  let requests=[];let result=new Response(JSON.stringify([{id:1}]),{headers:{'Content-Type':'application/json'}});
- const server=http.createServer(createApp({publicOrigin:'https://frank.eben-grad.ru',upstream:async(url,options)=>{requests.push({url,options});return result;}}));
+ const server=http.createServer(createApp({publicOrigin:'https://frank.eben-grad.ru',additionalOrigins:['https://109.120.140.198'],upstream:async(url,options)=>{requests.push({url,options});return result;}}));
  server.listen(0,'127.0.0.1');await once(server,'listening');
  t.after(()=>server.close());
  const base=`http://127.0.0.1:${server.address().port}`;
@@ -22,6 +22,9 @@ test('same-origin server API, static mode, upstream failures and credential priv
  assert.equal((await post(target.replace('safebooru.org','localhost'))).status,400);assert.equal(requests.length,0);
  const ok=await post();assert.equal(ok.status,200);assert.deepEqual(await ok.json(),[{id:1}]);
  assert.equal(requests[0].options.redirect,'error');assert.equal(ok.headers.get('cache-control'),'no-store');
+ result=new Response('[]');
+ assert.equal((await post(target,'https://109.120.140.198')).status,200);
+ assert.equal((await post(target,'https://109.120.140.198.attacker.example')).status,403);
  result=new Response('secret-api-key',{status:403});
  const error=await post();assert.equal(error.status,502);assert.doesNotMatch(await error.text(),/secret-api-key/);
  result=new Response('<html>challenge secret-api-key</html>');

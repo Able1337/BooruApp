@@ -59,6 +59,7 @@ Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=18737
 Environment=PUBLIC_ORIGIN=$site_origin
+Environment=ADDITIONAL_ORIGINS=https://109.120.140.198
 ExecStart=/usr/bin/node /opt/booru-pocket/current/server/server.mjs
 Restart=on-failure
 RestartSec=3
