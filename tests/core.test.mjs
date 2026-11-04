@@ -104,3 +104,10 @@ test('Rule34 template displays API host while post links stay on the main site',
   const [post]=normalizePosts([{id:123,file_url:'https://cdn.example.org/test.jpg'}],{...template,base});assert.equal(new URL(post.page).hostname,'rule34.xxx');
  }
 });
+test('collections are grouped by their own booru with common and missing sources kept separate',async()=>{
+ const {groupCollectionsBySource}=await import('../web/core.mjs');
+ const sources=[{id:'safe',name:'Safebooru'},{id:'rule',name:'Rule34'}];
+ const rows=[{id:'a',sourceId:'rule'},{id:'b',sourceId:'*'},{id:'c',sourceId:'safe'},{id:'d',sourceId:'removed'}];
+ const groups=groupCollectionsBySource(rows,sources);
+ assert.deepEqual(groups.map(g=>g.id),['safe','rule','*',null]);assert.deepEqual(groups.map(g=>g.items[0].id),['c','a','b','d']);
+});

@@ -29,7 +29,7 @@ test('tag collections preserve source, excluded tags and sorting and reopen the 
  const app=await setup({server:true});t.after(app.cleanup);const{$,memory}=app;
  $('query').value='landscape -city';$('saveCollection').click();$('collectionName').value='Мой поиск';$('collectionSort').value='score';$('collectionForm').onsubmit({preventDefault(){}});
  const rows=JSON.parse(memory.get('bp.collections'));assert.equal(rows[0].query,'landscape -city');assert.equal(rows[0].sort,'score');
- $('collectionCards').children[0].querySelector('.collection-card-main').click();await app.tick();
+ $('collectionCards').querySelectorAll('.collection-card')[0].querySelector('.collection-card-main').click();await app.tick();
  const target=new URL(JSON.parse(app.requests.at(-1).options.body).url);assert.match(target.searchParams.get('tags'),/landscape -city sort:score:desc/);
  assert.equal($('selectedTags').children.length,2);assert.equal($('homeView').hidden,true);assert.equal($('feedView').hidden,false);
 });
@@ -47,16 +47,22 @@ test('collection covers load the first result for each exact query and source wi
    const tag=target.searchParams.get('tags').split(' ')[0];return{ok:true,json:async()=>[{id:1,file_url:'https://example.org/'+tag+'.jpg',preview_url:'https://example.org/'+tag+'-preview.jpg',tags:tag}]};
  }});t.after(app.cleanup);app.intersectCollections();await delay(60);
  assert.equal(app.requests.length,3);assert.equal(maxActive,2);
- const cards=app.$('collectionCards').children;
- assert.equal(cards[0].querySelector('.card-cover').src,'https://example.org/landscape-preview.jpg');assert.equal(cards[1].querySelector('.card-cover').src,'https://example.org/city-preview.jpg');assert.equal(cards[2].querySelector('.card-cover').src,'https://example.org/landscape-preview.jpg');
+ const cards=app.$('collectionCards').querySelectorAll('.collection-card');
+ assert.equal(cards.find(n=>n.dataset.collectionId==='a').querySelector('.card-cover').src,'https://example.org/landscape-preview.jpg');assert.equal(cards.find(n=>n.dataset.collectionId==='b').querySelector('.card-cover').src,'https://example.org/city-preview.jpg');assert.equal(cards.find(n=>n.dataset.collectionId==='c').querySelector('.card-cover').src,'https://example.org/landscape-preview.jpg');
  const night=new URL(JSON.parse(app.requests.find(r=>JSON.parse(r.options.body).url.includes('night')).options.body).url);assert.equal(night.hostname,'danbooru.donmai.us');
- cards[0].querySelector('.card-edit').click();app.$('collectionQuery').value='forest';app.$('collectionForm').onsubmit({preventDefault(){}});app.intersectCollections();await delay(40);
- assert.equal(app.requests.length,4);assert.equal(app.$('collectionCards').children[0].querySelector('.card-cover').src,'https://example.org/forest-preview.jpg');
+ cards.find(n=>n.dataset.collectionId==='a').querySelector('.card-edit').click();app.$('collectionQuery').value='forest';app.$('collectionForm').onsubmit({preventDefault(){}});app.intersectCollections();await delay(40);
+ assert.equal(app.requests.length,4);assert.equal(app.$('collectionCards').querySelectorAll('.collection-card').find(n=>n.dataset.collectionId==='a').querySelector('.card-cover').src,'https://example.org/forest-preview.jpg');
 });
 test('a late cover response cannot replace the cover after changing the active booru',async t=>{
  const {setTimeout:delay}=await import('node:timers/promises');
  const app=await setup({server:true,storage:{'bp.sources':[{id:'safe',name:'Safe',base:'https://safebooru.org/',kind:'gelbooru'},{id:'dan',name:'Dan',base:'https://danbooru.donmai.us/',kind:'danbooru'}],'bp.activeId':'safe','bp.collections':[{id:'a',name:'Sky',query:'sky',sourceId:'*',sort:'new'}]},fetcher:async(url,options)=>{
   const old=JSON.parse(options.body).url.includes('safebooru.org');await delay(old?40:1);const file='https://example.org/'+(old?'old':'new')+'.jpg';return{ok:true,json:async()=>[{id:1,file_url:file,preview_url:file,tags:'sky'}]};
  }});t.after(app.cleanup);app.intersectCollections();app.$('sourceSelect').value='dan';app.$('sourceSelect').onchange();app.intersectCollections();await delay(80);
- assert.equal(app.$('collectionCards').children[0].querySelector('.card-cover').src,'https://example.org/new.jpg');
+ assert.equal(app.$('collectionCards').querySelectorAll('.collection-card')[0].querySelector('.card-cover').src,'https://example.org/new.jpg');
+});
+test('each booru section creates new collections preselected for that booru',async t=>{
+ const app=await setup({storage:{'bp.sources':[{id:'safe',name:'Safe',base:'https://safebooru.org/',kind:'gelbooru'},{id:'rule',name:'Rule34',base:'https://api.rule34.xxx/',kind:'gelbooru'}],'bp.collections':[{id:'a',name:'Source query',query:'sky',sourceId:'rule',sort:'new'},{id:'b',name:'Common',query:'city',sourceId:'*',sort:'new'}]}});t.after(app.cleanup);
+ const groups=app.$('collectionCards').querySelectorAll('.collection-group');assert.equal(groups.length,2);assert.equal(groups[0].dataset.sourceId,'rule');
+ groups[0].querySelector('.soft-button').click();assert.equal(app.$('collectionSource').value,'rule');app.$('collectionClose').click();
+ groups[1].querySelector('.soft-button').click();assert.equal(app.$('collectionSource').value,'*');
 });

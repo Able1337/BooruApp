@@ -197,3 +197,9 @@ export function parseTagPayload(text) {
   }
   return rows;
 }
+
+export function groupCollectionsBySource(collections,sources) {
+  const known=new Set(sources.map(s=>s.id)),buckets=new Map();
+  for(const c of collections){const id=c.sourceId==='*'?'*':known.has(c.sourceId)?c.sourceId:null;if(!buckets.has(id))buckets.set(id,[]);buckets.get(id).push(c);}
+  return [...sources.map(s=>({id:s.id,name:s.name})),{id:'*',name:'Общие коллекции'},{id:null,name:'Источник удалён'}].filter(g=>buckets.has(g.id)).map(g=>({...g,items:buckets.get(g.id)}));
+}

@@ -1,4 +1,4 @@
-import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload} from './core.mjs';
+import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource} from './core.mjs';
 const $=id=>document.getElementById(id);
 const el=(tag,cls='',text='')=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text)n.textContent=text;return n;};
 const button=(text,cls,action)=>{const n=el('button',cls,text);n.type='button';n.onclick=action;return n;};
@@ -62,12 +62,19 @@ function collectionSourceName(c){return c.sourceId==='*'?'Любой booru':sour
 function renderCollections(){
   coverObserver.disconnect();coverArts.clear();
   $('collectionCards').replaceChildren();$('collectionPicker').replaceChildren();
-  for(const c of collections){
+  for(const group of groupCollectionsBySource(collections,sources)){
+    const section=el('section','collection-group');section.dataset.sourceId=group.id??'missing';
+    const heading=el('div','collection-group-head'),title=el('h3');const provider=sources.find(s=>s.id===group.id);if(provider)title.append(mark(provider));title.append(el('span','',group.name),el('span','count',String(group.items.length)));heading.append(title);
+    if(group.id!==null){const add=button('＋ Коллекция','soft-button',()=>openCollection(null,group.id));add.setAttribute('aria-label','Новая коллекция: '+group.name);heading.append(add);}
+    const grid=el('div','collection-cards');section.append(heading,grid);$('collectionCards').append(section);
+    const pickerTitle=el('h3','picker-group-title',group.name);$('collectionPicker').append(pickerTitle);
+    for(const c of group.items){
     const card=el('article','collection-card');card.dataset.collectionId=c.id;const main=button('','collection-card-main',()=>applyCollection(c));
     const art=el('span','collection-art',c.sort==='score'?'✦':'#');coverArts.set(c.id,art);const descriptor=collectionCoverDescriptor(c);const image=descriptor&&c.coverKey===descriptor.key?coverImage(c.cover):null;if(image)art.append(image);
     const copy=el('span','collection-copy');copy.append(el('strong','',c.name),el('span','collection-query',c.query||'Все теги'),el('small','',collectionSourceName(c)));main.append(art,copy);
-    const edit=button('⋯','card-edit',()=>openCollection(c.id));edit.setAttribute('aria-label','Изменить коллекцию '+c.name);card.append(main,edit);$('collectionCards').append(card);coverObserver.observe(card);
+    const edit=button('⋯','card-edit',()=>openCollection(c.id));edit.setAttribute('aria-label','Изменить коллекцию '+c.name);card.append(main,edit);grid.append(card);coverObserver.observe(card);
     const pick=button('','collection-pick',()=>{closeDialog('collectionsDialog');applyCollection(c);});const text=el('span');text.append(el('strong','',c.name),el('small','',c.query||'Все теги'));pick.append(text);$('collectionPicker').append(pick);
+    }
   }
   if(!collections.length){$('collectionCards').append(el('p','hint','Сохраните текущий поиск — он появится здесь карточкой.'));$('collectionPicker').append(el('p','hint','Коллекций пока нет.'));}
 }
@@ -236,9 +243,9 @@ $('sourceForm').onsubmit=e=>{
   sources=editingSource?sources.map(x=>x.id===editingSource?s:x):[...sources,s];activeId=s.id;invalidateCollectionCovers(true);persistSources();closeDialog('sourceEditor');suggestionCache.clear();renderHome();if(tab==='feed')reload();else updateView();
 };
 $('deleteSource').onclick=()=>{if(sources.length===1)return;invalidateCollectionCovers();sources=sources.filter(s=>s.id!==editingSource);if(activeId===editingSource)activeId=sources[0].id;persistSources();closeDialog('sourceEditor');renderHome();if(tab==='feed')reload();};
-function openCollection(id=null){
+function openCollection(id=null,targetSourceId=null){
   editingCollection=id;const c=collections.find(c=>c.id===id);$('collectionEditorTitle').textContent=c?'Изменить коллекцию':'Сохранить коллекцию';$('collectionName').value=c?.name||'';$('collectionQuery').value=c?.query||tagsQuery(mergeTags(selected,parseTags($('query').value)));$('collectionSort').value=c?.sort||sort;
-  $('collectionSource').replaceChildren();const all=el('option','','Любой выбранный booru');all.value='*';$('collectionSource').append(all);for(const s of sources){const n=el('option','',s.name);n.value=s.id;$('collectionSource').append(n);}$('collectionSource').value=c?.sourceId||activeId;$('deleteCollection').hidden=!c;
+  $('collectionSource').replaceChildren();const all=el('option','','Любой выбранный booru');all.value='*';$('collectionSource').append(all);for(const s of sources){const n=el('option','',s.name);n.value=s.id;$('collectionSource').append(n);}$('collectionSource').value=c?.sourceId||targetSourceId||activeId;$('deleteCollection').hidden=!c;
   if($('collectionsDialog').open)closeDialog('collectionsDialog');$('collectionEditor').showModal();
 }
 $('collectionForm').onsubmit=e=>{e.preventDefault();const c={id:editingCollection||uid('collection'),name:$('collectionName').value.trim(),query:tagsQuery(parseTags($('collectionQuery').value)),sourceId:$('collectionSource').value,sort:$('collectionSort').value,cover:''};if(!c.name)return;collections=editingCollection?collections.map(x=>x.id===editingCollection?c:x):[c,...collections];persist('bp.collections',collections);closeDialog('collectionEditor');renderCollections();};
