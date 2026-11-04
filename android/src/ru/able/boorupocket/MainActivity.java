@@ -57,7 +57,7 @@ public class MainActivity extends Activity {
                 return true;
             }
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){session++;if(nativePort!=null){nativePort.close();nativePort=null;}}
-            @Override public void onPageFinished(WebView view,String url){if(trusted(url)&&url.equals(view.getUrl()))attachPort(url);}
+            @Override public void onPageFinished(WebView view,String url){if(trusted(url)&&documentUrl(url).equals(documentUrl(view.getUrl())))attachPort(url);}
             @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){if(request.isForMainFrame())fallback();}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame()&&response.getStatusCode()>=400)fallback();}
         });
@@ -74,7 +74,8 @@ public class MainActivity extends Activity {
         // Bundled by default: works before Pages is enabled and has an offline UI.
         web.loadUrl(getPreferences(0).getBoolean("remote",false)?REMOTE:LOCAL);
     }
-    private boolean trusted(String url){return url!=null&&(url.equals(LOCAL)||url.equals(LOCAL+"index.html")||url.equals(REMOTE)||url.equals(REMOTE+"index.html"));}
+    private String documentUrl(String url){return url==null?null:url.split("#",2)[0];}
+    private boolean trusted(String url){url=documentUrl(url);return url!=null&&(url.equals(LOCAL)||url.equals(LOCAL+"index.html")||url.equals(REMOTE)||url.equals(REMOTE+"index.html"));}
     private void chooseMode(){new AlertDialog.Builder(this).setTitle("Откуда загружать интерфейс?").setItems(new String[]{"Из APK — автономный интерфейс","Сайт — обновления интерфейса","Перезагрузить"},(d,which)->{if(which<2){getPreferences(0).edit().putBoolean("remote",which==1).apply();fallingBack=false;web.loadUrl(which==1?REMOTE:LOCAL);}else web.reload();}).show();}
     private void fallback(){if(!fallingBack&&web.getUrl()!=null&&web.getUrl().startsWith(REMOTE)){fallingBack=true;web.post(()->{Toast.makeText(this,"Сайт пока недоступен. Открываем встроенную версию.",Toast.LENGTH_LONG).show();web.loadUrl(LOCAL);});}}
     private void openExternal(Uri uri){try{startActivity(new Intent(Intent.ACTION_VIEW,uri));}catch(ActivityNotFoundException e){Toast.makeText(this,"Не найден браузер",Toast.LENGTH_SHORT).show();}}
