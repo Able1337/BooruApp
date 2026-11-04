@@ -1,21 +1,22 @@
 // Browser regression test, using a temporary CI-only Playwright installation.
 import {createServer} from 'node:http';
 import {once} from 'node:events';
-import {mkdir} from 'node:fs/promises';
+import {mkdir,readFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {pathToFileURL} from 'node:url';
 import {createApp} from '../server/server.mjs';
 const {chromium}=await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href);
 const rows=Array.from({length:3},(_,i)=>({id:i+1,file_url:`https://media.booru.test/${i+1}.svg`,preview_url:`https://media.booru.test/${i+1}.svg`,sample_url:`https://media.booru.test/${i+1}.svg`,width:800,height:1000,tags:'landscape sky artist_name character_name world_name',tag_string_artist:'artist_name',tag_string_character:'character_name',tag_string_copyright:'world_name',score:42}));
 const app=createApp({publicOrigin:'',additionalOrigins:[],upstream:async url=>{
- const u=new URL(url);return new Response(JSON.stringify(u.pathname.includes('autocomplete')||u.pathname==='/tags.json'||u.searchParams.get('s')==='tag'?[{name:'landscape',post_count:12345},{name:'landscape_scenery',post_count:1000}]:rows));
+ const u=new URL(url);if((u.searchParams.get('tags')||'').includes('video_smoke'))return new Response(JSON.stringify([{...rows[0],file_url:'https://media.booru.test/scroll-video.webm'},...rows.slice(1)]));return new Response(JSON.stringify(u.pathname.includes('autocomplete')||u.pathname==='/tags.json'||u.searchParams.get('s')==='tag'?[{name:'landscape',post_count:12345},{name:'landscape_scenery',post_count:1000}]:rows));
 }});
 const server=createServer(app);server.listen(0,'127.0.0.1');await once(server,'listening');
 const url=`http://127.0.0.1:${server.address().port}`;
 const browser=await chromium.launch({headless:true});await mkdir('build/ui',{recursive:true});
 async function context(viewport){
  const c=await browser.newContext({viewport,isMobile:viewport.width<600,hasTouch:viewport.width<600});
- await c.route('https://media.booru.test/**',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000"><rect width="800" height="1000" fill="#8cabb7"/><circle cx="600" cy="220" r="100" fill="#efdaa7"/><path d="M0 1000V700L300 300L600 850L800 500V1000Z" fill="#3b6063"/><path d="M0 1000L400 600L800 1000Z" fill="#293e4c"/></svg>'}));return c;
+ await c.route('https://media.booru.test/*.webm',async route=>route.fulfill({contentType:'video/webm',body:await readFile(new URL('../tests/fixtures/scroll-video.webm',import.meta.url))}));
+ await c.route('https://media.booru.test/*.svg',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000"><rect width="800" height="1000" fill="#8cabb7"/><circle cx="600" cy="220" r="100" fill="#efdaa7"/><path d="M0 1000V700L300 300L600 850L800 500V1000Z" fill="#3b6063"/><path d="M0 1000L400 600L800 1000Z" fill="#293e4c"/></svg>'}));return c;
 }
 let page;
 try{
@@ -43,8 +44,12 @@ try{
  await page.goto(url);await page.locator('.source-card').first().waitFor();await page.waitForFunction(()=>document.querySelectorAll('#collectionCards .card-cover').length>=2);await page.locator('#collectionCards .collection-card').last().scrollIntoViewIfNeeded();await page.waitForFunction(()=>document.querySelectorAll('#collectionCards .card-cover').length===4);assert.ok(await page.locator('.collection-cards').first().evaluate(n=>n.scrollWidth<=n.clientWidth+1));const rects=await page.locator('#collectionCards .collection-card').evaluateAll(nodes=>nodes.map(n=>({top:n.getBoundingClientRect().top,left:n.getBoundingClientRect().left})));assert.ok(rects[2].top>rects[0].top);await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:'build/ui/mobile-home.png',fullPage:true});
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
  await page.click('#feedTab');await page.waitForFunction(()=>document.querySelectorAll('#grid .post').length===3);
- await page.screenshot({path:'build/ui/mobile-list.png'});await page.evaluate(()=>scrollTo(0,500));assert.ok(await page.locator('.search-panel').evaluate(n=>n.getBoundingClientRect().top<2));
+ await page.screenshot({path:'build/ui/mobile-list.png'});await page.evaluate(()=>scrollTo(0,700));await page.waitForFunction(()=>document.getElementById('searchPanel').getBoundingClientRect().bottom<=0);await page.evaluate(()=>scrollBy(0,-80));await page.waitForFunction(()=>document.getElementById('searchPanel').getBoundingClientRect().top>=0);
  await page.evaluate(()=>scrollTo(0,0));await page.fill('#query','la');await page.locator('.suggestion').nth(1).waitFor();await page.screenshot({path:'build/ui/mobile-suggestions.png'});await page.press('#query','Escape');
+ await page.fill('#query','video_smoke');await page.press('#query','Enter');await page.locator('#grid video').waitFor();
+ await page.locator('#grid video').evaluate(async video=>{video.muted=true;await video.play();});await page.waitForFunction(()=>!document.querySelector('#grid video').paused);
+ await page.evaluate(()=>{const video=document.querySelector('#grid video');scrollBy(0,video.getBoundingClientRect().bottom+100);});await page.waitForFunction(()=>document.querySelector('#grid video').paused);
+ await page.evaluate(()=>scrollTo(0,0));await page.waitForFunction(()=>document.getElementById('searchPanel').getBoundingClientRect().top>=0);assert.equal(await page.locator('#grid video').evaluate(video=>video.paused),true);
  await page.click('#settingsOpen');await page.click('#addSourceFromSettings');
  await page.locator('#sourceEditor[open]').waitFor();await page.screenshot({path:'build/ui/mobile-source-editor.png'});
  assert.deepEqual(mobileErrors,[]);await mobile.close();console.log('Desktop/mobile UI scenarios passed: multiple sources, autocomplete, chips, collections, list/grid, viewer and saved posts.');

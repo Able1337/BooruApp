@@ -28,8 +28,29 @@ function persistSources(){persist('bp.sources',sources);persist('bp.activeId',ac
 function mark(s){const t=sourceTemplate(s);const n=el('span','source-mark',t.mark);n.dataset.color=t.color;return n;}
 function coverImage(url){const u=httpsUrl(url);if(!u)return null;const image=el('img','card-cover');image.src=displayMedia(u);image.alt='';image.loading='lazy';image.onerror=()=>image.remove();return image;}
 function closeDialog(id){$(id).close();}
-function pauseMedia(){const v=$('media').querySelector('video');if(v)v.pause();}
+function pauseMedia(){for(const v of document.querySelectorAll('video'))v.pause();}
 function closeViewer(){pauseMedia();closeDialog('viewer');}
+const feedVideoObserver=new IntersectionObserver(entries=>{
+  for(const entry of entries)if(!entry.isIntersecting||entry.intersectionRatio<0.1)entry.target.pause();
+},{threshold:[0,0.1]});
+function clearFeedVideos(){for(const video of $('grid').querySelectorAll('video'))video.pause();feedVideoObserver.disconnect();}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)pauseMedia();});
+let scrollAnchor=window.scrollY||0,scrollDirection=0,scrollDistance=0,scrollFrame=0;
+function revealSearch(){ $('searchPanel').classList.remove('scroll-hidden'); }
+window.addEventListener('scroll',()=>{
+  if(scrollFrame)return;
+  scrollFrame=requestAnimationFrame(()=>{
+    scrollFrame=0;const y=Math.max(0,window.scrollY||0),delta=y-scrollAnchor;scrollAnchor=y;
+    if(document.querySelector('dialog[open]'))return;
+    if(y<60){revealSearch();scrollDistance=0;return;}
+    const direction=Math.sign(delta);if(!direction)return;
+    if(direction!==scrollDirection){scrollDirection=direction;scrollDistance=0;}
+    scrollDistance+=Math.abs(delta);
+    if(scrollDistance>=10){$('searchPanel').classList.toggle('scroll-hidden',direction>0);if(direction>0)hideSuggestions();scrollDistance=0;}
+  });
+},{passive:true});
+$('searchPanel').addEventListener?.('focusin',revealSearch);
+
 function count(){ $('savedCount').textContent=String(saved.length); }
 function isSaved(p){return saved.some(x=>x.key===p.key);}
 window.addEventListener('message',event=>{
@@ -118,6 +139,7 @@ async function loadCollectionCover(job){
   if(changed)persist('bp.collections',collections);
 }
 function updateView(){
+  if(tab==='home')clearFeedVideos();revealSearch();
   $('homeView').hidden=tab!=='home';$('feedView').hidden=tab==='home';$('viewToggle').hidden=tab==='home';
   for(const [id,key]of [['homeTab','home'],['feedTab','feed'],['savedTab','saved']])$(id).classList.toggle('active',tab===key);
   $('grid').className=view==='list'?'posts-list':'posts-grid';$('listView').setAttribute('aria-pressed',String(view==='list'));$('gridView').setAttribute('aria-pressed',String(view==='grid'));$('sort').value=sort;
@@ -173,7 +195,7 @@ $('query').onkeydown=e=>{
   else if(e.key==='Enter'&&!$('suggestions').hidden&&suggestionIndex>=0){e.preventDefault();suggestionActions[suggestionIndex]?.();}else if(e.key==='Escape')hideSuggestions();
 };
 function reload(){
-  generation++;busy=false;done=false;page=0;posts=[];closeViewer();$('grid').replaceChildren();showNotice();renderTags();updateView();
+  generation++;busy=false;done=false;page=0;posts=[];closeViewer();clearFeedVideos();$('grid').replaceChildren();showNotice();renderTags();updateView();
   if(tab==='saved'){posts=saved.filter(p=>selected.every(t=>t.excluded?!p.tags.includes(t.value):p.tags.includes(t.value)));renderPosts();$('more').hidden=true;$('status').textContent=posts.length?'':'Сохранённых постов по этим тегам пока нет.';}
   else if(tab==='feed')load();
 }
@@ -197,12 +219,12 @@ function toggleFavorite(p){
   if(posts[current]?.key===p.key)$('savePost').textContent=isSaved(p)?'♥ Пост сохранён':'♡ Сохранить пост';
 }
 function renderPosts(items=posts,append=false){
-  if(!append)$('grid').replaceChildren();const fragment=document.createDocumentFragment();
+  if(!append){clearFeedVideos();$('grid').replaceChildren();}const fragment=document.createDocumentFragment();
   for(const p of items){
     const card=el('article','post');const s=sources.find(x=>x.id===p.sourceId)||{name:p.source,base:p.page||p.file};
     const head=el('div','post-head');head.append(mark(s),el('span','',p.source||source().name),el('span','post-id','#'+p.id));card.append(head);
     let media;
-    if(p.video&&view==='list'){media=el('div','post-media');const video=el('video');video.src=displayMedia(p.file);video.poster=displayMedia(p.preview);video.controls=true;video.playsInline=true;video.preload='none';media.append(video);}
+    if(p.video&&view==='list'){media=el('div','post-media');const video=el('video');video.src=displayMedia(p.file);video.poster=displayMedia(p.preview);video.controls=true;video.playsInline=true;video.preload='none';media.append(video);feedVideoObserver.observe(video);}
     else {media=view==='grid'?button('','post-media',()=>openPost(posts.findIndex(x=>x.key===p.key))):el('div','post-media');if(view==='grid')media.setAttribute('aria-label','Открыть пост '+p.id);const image=el('img');image.src=displayMedia(view==='grid'?p.preview:(p.sample||p.file));image.alt=p.tags.slice(0,8).join(', ');image.loading='lazy';image.decoding='async';image.style.aspectRatio=p.width+'/'+p.height;const primary=view==='grid'?p.preview:(p.sample||p.file);let fallback=false;image.onerror=()=>{if(!fallback&&primary!==p.preview){fallback=true;image.src=displayMedia(p.preview);}else image.alt='Медиа недоступно — откройте оригинал';};media.append(image);if(p.video)media.append(el('span','video-badge','▶ VIDEO'));}
     card.append(media);const footer=el('div','post-footer');const save=button(isSaved(p)?'♥':'♡',isSaved(p)?'saved':'',()=>toggleFavorite(p));save.dataset.favoriteKey=p.key;save.setAttribute('aria-label',isSaved(p)?'Убрать из сохранённых':'Сохранить пост');let open;if(view==='grid')open=button('Открыть','view-label',()=>openPost(posts.findIndex(x=>x.key===p.key)));else{open=el('a','post-original','Оригинал ↗');open.href=displayMedia(p.file);open.target='_blank';open.rel='noopener noreferrer';}
     footer.append(save,open,el('span','post-score','↑ '+p.score));card.append(footer);
