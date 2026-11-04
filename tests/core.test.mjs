@@ -96,3 +96,11 @@ test('a newly selected sort filter replaces the previous sort or order filter',a
  assert.equal(tagsQuery(mergeTags(parseTags('sky sort:score:desc'),parseTags('order:random'))),'sky order:random');
  assert.equal(tagsQuery(parseTags('sky sort:score:desc sort:random')),'sky sort:random');
 });
+test('Rule34 template displays API host while post links stay on the main site',async()=>{
+ const {SOURCE_TEMPLATES,sourceTemplate}=await import('../web/core.mjs');
+ const template=SOURCE_TEMPLATES.find(s=>s.id==='rule34');assert.equal(template.base,'https://api.rule34.xxx/');
+ for(const base of ['https://rule34.xxx/','https://www.rule34.xxx/','https://api.rule34.xxx/']){
+  assert.equal(sourceTemplate({base}).id,'rule34');
+  const [post]=normalizePosts([{id:123,file_url:'https://cdn.example.org/test.jpg'}],{...template,base});assert.equal(new URL(post.page).hostname,'rule34.xxx');
+ }
+});

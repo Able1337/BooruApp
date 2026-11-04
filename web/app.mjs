@@ -218,7 +218,7 @@ function applyTemplate(t){
 }
 function updateSourceHint(){
   const kind=$('sourceKind').value;$('sourceUserLabel').textContent=kind==='gelbooru'?'User ID':'Логин';
-  const t=SOURCE_TEMPLATES.find(t=>httpsUrl(t.base)===httpsUrl($('sourceBase').value));$('sourceHint').textContent=t?.hint||'Сервер поддерживает Safebooru, Rule34, Gelbooru, Danbooru и e621.';
+  const t=sourceTemplate({base:$('sourceBase').value,name:$('sourceTitle').value});$('sourceHint').textContent=t?.hint||'Сервер поддерживает Safebooru, Rule34, Gelbooru, Danbooru и e621.';
   for(const n of $('sourceTemplates').querySelectorAll('button'))n.classList.toggle('active',n.dataset.template===t?.id);
 }
 function openSource(id=null){

@@ -6,7 +6,7 @@ test('migrates legacy credentials and adds a second prefilled provider without r
  const app=await setup({storage:{'bp.source':legacy}});t.after(app.cleanup);const{$,memory}=app;
  assert.equal(app.requests.length,0);assert.equal($('homeView').hidden,false);
  const initial=JSON.parse(memory.get('bp.sources'));assert.equal(initial[0].apiKey,'private-test');
- $('addSource').click();assert.equal($('sourceBase').value,'https://rule34.xxx/');
+ $('addSource').click();assert.equal($('sourceBase').value,'https://api.rule34.xxx/');
  $('sourceTemplates').children.find(n=>n.dataset.template==='e621').click();
  assert.equal($('sourceBase').value,'https://e621.net/');assert.equal($('sourceKind').value,'e621');
  $('sourceForm').onsubmit({preventDefault(){}});

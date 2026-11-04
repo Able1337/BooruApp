@@ -44,6 +44,7 @@ export function postRows(payload) {
   return rows;
 }
 export function normalizePosts(payload, source) {
+  const siteBase=['rule34.xxx','www.rule34.xxx','api.rule34.xxx'].includes(new URL(source.base).hostname)?'https://rule34.xxx/':source.base;
   return postRows(payload).filter(p => p && typeof p === 'object' && p.id != null).map(p => {
     const file = httpsUrl(p.file_url || p.file?.url || p.large_file_url, source.base);
     const preview = httpsUrl(p.preview_file_url || p.preview_url || p.preview?.url || p.sample?.url || p.sample_url || p.file_url, source.base);
@@ -53,7 +54,7 @@ export function normalizePosts(payload, source) {
     return {id:String(p.id), key:source.base+'#'+p.id, file, preview, sample:ext==='gif'?file:sample, tags, sourceId:source.id||'', tagGroups:normalizeTagGroups(p,tags), score:Number(p.score?.total??p.score)||0, ext,
       width:Number(p.image_width || p.width || p.file?.width)||800, height:Number(p.image_height || p.height || p.file?.height)||1000,
       video:['mp4','webm'].includes(ext), rating:p.rating || '', source:source.name,
-      page:['danbooru','e621'].includes(source.kind) ? new URL('posts/'+p.id, source.base).href : new URL('index.php?page=post&s=view&id='+encodeURIComponent(p.id), source.base).href};
+      page:['danbooru','e621'].includes(source.kind) ? new URL('posts/'+p.id, source.base).href : new URL('index.php?page=post&s=view&id='+encodeURIComponent(p.id), siteBase).href};
   }).filter(p => p.id !== 'undefined' && p.preview && p.file);
 }
 
@@ -63,7 +64,7 @@ export function sanitizeFavorites(data) {
 }
 
 export const SOURCE_TEMPLATES = [
-  {id:'rule34',name:'Rule34',base:'https://rule34.xxx/',kind:'gelbooru',mark:'34',color:'green',hint:'Нужны User ID и API key из API Access Credentials.'},
+  {id:'rule34',name:'Rule34',base:'https://api.rule34.xxx/',kind:'gelbooru',mark:'34',color:'green',hint:'Нужны User ID и API key из API Access Credentials.'},
   {id:'gelbooru',name:'Gelbooru',base:'https://gelbooru.com/',kind:'gelbooru',mark:'G',color:'blue',hint:'Для API могут потребоваться User ID и API key.'},
   {id:'danbooru',name:'Danbooru',base:'https://danbooru.donmai.us/',kind:'danbooru',mark:'D',color:'red',hint:'Логин и API key необязательны для публичных запросов. Действуют лимиты источника.'},
   {id:'e621',name:'e621',base:'https://e621.net/',kind:'e621',mark:'e6',color:'gold',hint:'Логин и API key необязательны для публичного API.'},
@@ -71,7 +72,7 @@ export const SOURCE_TEMPLATES = [
 ];
 export function sourceTemplate(source) {
   const host=new URL(httpsUrl(source?.base)||'https://safebooru.org/').hostname;
-  return SOURCE_TEMPLATES.find(t=>new URL(t.base).hostname===host||(t.id==='rule34'&&host==='api.rule34.xxx'))||{mark:(typeof source?.name==='string'?source.name:'B').slice(0,2).toUpperCase(),color:'purple'};
+  return SOURCE_TEMPLATES.find(t=>new URL(t.base).hostname===host||(t.id==='rule34'&&['rule34.xxx','www.rule34.xxx','api.rule34.xxx'].includes(host)))||{mark:(typeof source?.name==='string'?source.name:'B').slice(0,2).toUpperCase(),color:'purple'};
 }
 export function sanitizeSources(data,legacy) {
   const fallback={...SOURCE_TEMPLATES.find(t=>t.id==='safebooru')};
