@@ -1,4 +1,4 @@
-import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource,mediaUrl,encodeRoute,decodeRoute} from './core.mjs';
+import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource,mediaUrl,encodeRoute,decodeRoute,routeHistoryMode} from './core.mjs';
 const $=id=>document.getElementById(id);
 const el=(tag,cls='',text='')=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text)n.textContent=text;return n;};
 const button=(text,cls,action)=>{const n=el('button',cls,text);n.type='button';n.onclick=action;return n;};
@@ -83,7 +83,7 @@ function syncRoute(){
   if(restoringRoute||!window.history)return;
   const hash=tab==='home'?'#home':routeFor();
   if(routePage!==tab)window.scrollTo?.({top:0});
-  if(hash!==window.location.hash){window.history[routePage!==tab?'pushState':'replaceState']({booruPocket:true,page:tab},'',hash);}
+  if(hash!==window.location.hash){window.history[routeHistoryMode(window.location.hash,hash)]({booruPocket:true,page:tab},'',hash);}
   routePage=tab;routeHash=hash;
 }
 function restoreRoute(force=false){

@@ -119,3 +119,11 @@ test('route links preserve the public search state and omit credentials and unkn
  assert.deepEqual(decodeRoute('#evil?api_key=secret'),{page:'home'});assert.equal(encodeRoute({page:'home',tags:'sky'}),'#home');
  assert.equal(decodeRoute('#feed?sort=bad&view=bad&tags=sky').sort,'new');
 });
+test('search changes push history while layout-only changes replace the current entry',async()=>{
+ const {encodeRoute,routeHistoryMode}=await import('../web/core.mjs');
+ const search=encodeRoute({page:'feed',booru:'gelbooru',tags:'sky'});
+ assert.equal(routeHistoryMode('#home',search),'pushState');
+ for(const next of [{tags:'sky night'},{tags:'-sky'},{booru:'e621'},{sort:'score'},{page:'home'}])assert.equal(routeHistoryMode(search,encodeRoute({page:'feed',booru:'gelbooru',tags:'sky',...next})),'pushState');
+ assert.equal(routeHistoryMode(search,encodeRoute({page:'feed',booru:'gelbooru',tags:'sky',view:'grid'})),'replaceState');
+ assert.equal(routeHistoryMode(search,search),'replaceState');
+});

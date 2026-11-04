@@ -236,3 +236,8 @@ export function decodeRoute(hash=''){
   const p=new URLSearchParams(query.slice(0,16384));
   return {page,booru:(p.get('booru')||'').slice(0,100),tags:tagsQuery(parseTags(p.get('tags')||'')),sort:['score','score_asc','random','old'].includes(p.get('sort'))?p.get('sort'):'new',view:p.get('view')==='grid'?'grid':'list',collection:(p.get('collection')||'').slice(0,100)};
 }
+
+export function routeHistoryMode(previous,next){
+  const a=decodeRoute(previous),b=decodeRoute(next);
+  return ['page','booru','tags','sort','collection'].some(key=>a[key]!==b[key])?'pushState':'replaceState';
+}
