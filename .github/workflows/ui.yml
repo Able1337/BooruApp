@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['web/**', 'server/**', 'scripts/ui-smoke.mjs', '.github/workflows/ui.yml']
+    paths: ['web/**', 'server/**', 'tests/**', 'scripts/ui-smoke.mjs', '.github/workflows/ui.yml']
   pull_request:
-    paths: ['web/**', 'server/**', 'scripts/ui-smoke.mjs']
+    paths: ['web/**', 'server/**', 'tests/**', 'scripts/ui-smoke.mjs']
 permissions:
   contents: read
 concurrency:
