@@ -39,3 +39,16 @@ test('Rule34 DAPI uses API host while preserving source identity and escaped cre
  const regular=new URL(makeRequest({...gel,base:'https://rule34.xxx.example.org/'},'',0));
  assert.equal(regular.hostname,'rule34.xxx.example.org');
 });
+test('API errors explain authentication and rate limits without leaking server text',async()=>{
+ const {postRows}=await import('../web/core.mjs');
+ for(const payload of [{error:'Invalid API key SECRET'}, {message:'Missing authentication SECRET'}, {'@attributes':{reason:'Invalid user_id SECRET'}}]){
+  assert.throws(()=>postRows(payload),e=>/авторизацию/.test(e.message)&&!e.message.includes('SECRET'));
+ }
+ assert.throws(()=>postRows({error:'Rate limit exceeded SECRET'}),/лимит/);
+ assert.throws(()=>postRows({success:false,message:'unknown SECRET'}),e=>!e.message.includes('SECRET'));
+});
+test('Rule34 requires separate credentials and rejects pasted URL parameters',()=>{
+ const source={...gel,base:'https://api.rule34.xxx/'};
+ assert.throws(()=>makeRequest(source,'',0),/User ID/);
+ assert.throws(()=>makeRequest({...source,userId:'12',apiKey:'&api_key=SECRET&user_id=12'},'',0),/только значения/);
+});

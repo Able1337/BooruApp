@@ -10,6 +10,12 @@ export function makeRequest(source, tags, page, limit = 30) {
   if (source.kind === 'gelbooru' && ['rule34.xxx', 'www.rule34.xxx'].includes(apiBase.hostname)) {
     apiBase.hostname = 'api.rule34.xxx';
   }
+  if (source.kind === 'gelbooru' && apiBase.hostname === 'api.rule34.xxx') {
+    if (!source.userId || !source.apiKey) throw new Error('Rule34 требует User ID и API key из раздела API Access Credentials в настройках аккаунта.');
+    if (!/^\d+$/.test(source.userId) || /(?:api_key|user_id)=|\s/.test(source.apiKey)) {
+      throw new Error('Введи только значения User ID и API key, без api_key=, user_id=, пробелов и частей URL.');
+    }
+  }
   const apiRoot = apiBase.href;
   const u = new URL(source.kind === 'danbooru' ? 'posts.json' : 'index.php', apiRoot.endsWith('/') ? apiRoot : apiRoot + '/');
   if (source.kind === 'danbooru') {
@@ -24,6 +30,15 @@ export function makeRequest(source, tags, page, limit = 30) {
   return u.href;
 }
 export function postRows(payload) {
+  // Never display raw API errors: providers may echo credential-bearing request URLs.
+  const errors = payload && !Array.isArray(payload) ? [payload.error, payload.message, payload.reason, payload['@attributes']?.reason] : [];
+  const text = errors.filter(v => typeof v === 'string').join(' ').toLowerCase();
+  if (/auth|api.?key|user.?id|credential|access denied|unauthorized|forbidden/.test(text)) {
+    throw new Error('API отклонил авторизацию. Проверь пару User ID и API key в API Access Credentials своего аккаунта.');
+  }
+  if (/rate|too many|limit exceeded/.test(text)) throw new Error('Превышен лимит запросов API. Подожди минуту и повтори.');
+  if (/search down|overload|maintenance/.test(text)) throw new Error('Поиск источника временно недоступен. Повтори позже.');
+  if (text || payload?.success === false || payload?.success === 'false') throw new Error('API вернул сообщение об ошибке вместо списка публикаций. Проверь доступ API в аккаунте источника.');
   const rows = Array.isArray(payload) ? payload : payload?.post ?? payload?.posts;
   if (!Array.isArray(rows)) throw new Error('Источник вернул неожиданный формат данных');
   return rows;
