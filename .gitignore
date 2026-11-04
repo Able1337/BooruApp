@@ -1,0 +1,6 @@
+android-sdk/
+build/
+*.keystore
+*.jks
+local.properties
+.DS_Store
