@@ -1,0 +1,41 @@
+name: Deploy server
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: booru-server
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+      - name: Install SSH client
+        run: sudo apt-get update -qq && sudo apt-get install -y sshpass
+      - name: Connect and inspect server
+        env:
+          SSHPASS: ${{ secrets.BOORU_DEPLOY_PASSWORD }}
+        run: |
+          test -n "$SSHPASS"
+          ssh-keyscan -T 15 -t ed25519 109.120.140.198 > "$RUNNER_TEMP/booru-known-hosts"
+          chmod 600 "$RUNNER_TEMP/booru-known-hosts"
+          sshpass -e ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/booru-known-hosts" -o ConnectTimeout=15 root@109.120.140.198 'uname -a; cat /etc/os-release; df -h /; ss -ltnp'
+      - name: Deploy and enable HTTPS
+        env:
+          SSHPASS: ${{ secrets.BOORU_DEPLOY_PASSWORD }}
+        run: |
+          tar -czf "$RUNNER_TEMP/booru-source.tar.gz" web server scripts tests package.json
+          sshpass -e scp -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/booru-known-hosts" "$RUNNER_TEMP/booru-source.tar.gz" root@109.120.140.198:/tmp/booru-source-${{ github.sha }}.tar.gz
+          sshpass -e ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/booru-known-hosts" root@109.120.140.198 'set -eu; mkdir -p /tmp/booru-source-${{ github.sha }}; tar -xzf /tmp/booru-source-${{ github.sha }}.tar.gz -C /tmp/booru-source-${{ github.sha }}; bash /tmp/booru-source-${{ github.sha }}/scripts/install-server.sh frank.eben-cord.ru; rm -rf /tmp/booru-source-${{ github.sha }} /tmp/booru-source-${{ github.sha }}.tar.gz'
+      - name: Verify public page and API
+        run: |
+          curl --fail --silent --show-error https://frank.eben-cord.ru/healthz
+          curl --fail --silent --show-error https://frank.eben-cord.ru/ | grep -q 'name="booru-api" content="same-origin"'
+          curl --fail --silent --show-error -H 'Content-Type: application/json' -H 'Origin: https://frank.eben-cord.ru' --data '{"url":"https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&pid=0&limit=1&tags=landscape"}' https://frank.eben-cord.ru/api/posts > "$RUNNER_TEMP/api-smoke.json"
+          node -e 'const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/api-smoke.json","utf8"));if(!Array.isArray(d)&&!Array.isArray(d.post)&&!Array.isArray(d.posts))process.exit(1);console.log("Live API response is a post list")'

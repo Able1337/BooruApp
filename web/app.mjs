@@ -8,6 +8,7 @@ if (!source || typeof source !== 'object' || !httpsUrl(source.base) || !['gelboo
 let posts = [], page = 0, busy = false, done = false, tab = 'feed', query = '', generation = 0, current = 0;
 let port = null, serial = 0;
 const pending = new Map();
+const serverApi = document.querySelector?.('meta[name="booru-api"]')?.content === 'same-origin';
 window.addEventListener('message', event => {
   // A port is supplied by the APK only after its trusted main page has loaded.
   if (event.data !== 'booru-native-v1' || !event.ports?.[0] || port) return;
@@ -29,6 +30,12 @@ function nativeGet(url) {
 }
 async function get(url) {
   if (port) return nativeGet(url);
+  if (serverApi) {
+    const response = await fetch('/api/posts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url}), credentials:'omit', signal:AbortSignal.timeout(30000)});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Ошибка сервера');
+    return data;
+  }
   const response = await fetch(url, {credentials:'omit',signal:AbortSignal.timeout(30000)});
   if (!response.ok) throw new Error('HTTP '+response.status);
   return response.json();
