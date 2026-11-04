@@ -1,0 +1,26 @@
+name: Deploy server alternate runner
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/server-alternate.yml']
+permissions:
+  contents: read
+concurrency:
+  group: booru-server
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install paramiko==3.5.1
+      - name: Deploy tested source and verify public site
+        env:
+          BOORU_DEPLOY_PASSWORD: ${{ secrets.BOORU_DEPLOY_PASSWORD }}
+          PYTHONIOENCODING: utf-8
+        run: python scripts/deploy-via-ssh.py
