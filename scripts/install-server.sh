@@ -4,6 +4,9 @@ set -euo pipefail
 umask 027
 cd "$(dirname "$0")/.."
 site_domain="${1:-frank.eben-cord.ru}"
+site_port="${2:-8443}"
+if [[ ! "$site_port" =~ ^[0-9]+$ ]] || ((site_port < 1024 || site_port > 65535)); then echo 'Invalid HTTPS port.' >&2; exit 1; fi
+site_origin="https://$site_domain:$site_port"
 if [[ "$EUID" -ne 0 ]]; then echo 'Run as root.' >&2; exit 1; fi
 if [[ ! "$site_domain" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ || "$site_domain" != *.* ]]; then echo 'Invalid domain.' >&2; exit 1; fi
 if ! command -v apt-get >/dev/null; then echo 'This installer supports Debian/Ubuntu with systemd.' >&2; exit 1; fi
@@ -54,7 +57,7 @@ WorkingDirectory=/opt/booru-pocket/current
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=18737
-Environment=PUBLIC_ORIGIN=https://$site_domain
+Environment=PUBLIC_ORIGIN=$site_origin
 ExecStart=/usr/bin/node /opt/booru-pocket/current/server/server.mjs
 Restart=on-failure
 RestartSec=3
@@ -68,37 +71,18 @@ UMask=0077
 [Install]
 WantedBy=multi-user.target
 UNIT
-# Preserve Certbot's existing HTTPS vhost on repeat installs.
-if [[ ! -f "$site_config" ]]; then
+# Serve certificate challenges on HTTP; never bind the existing VPN's 443 port.
+mkdir -p /var/lib/booru-pocket/acme
+chmod 755 /var/lib/booru-pocket /var/lib/booru-pocket/acme
 cat > "$site_config" <<NGINX
 # Managed by Booru Pocket
 server {
     listen 80;
     server_name $site_domain;
-    client_max_body_size 16k;
-    location / {
-        proxy_pass http://127.0.0.1:18737;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Forwarded-For \$remote_addr;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 35s;
-        proxy_send_timeout 15s;
-    }
-    location = /api/posts {
-        # API URLs and keys are in POST bodies, never in access-log query strings.
-        access_log off;
-        proxy_pass http://127.0.0.1:18737;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Forwarded-For \$remote_addr;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 35s;
-        proxy_send_timeout 15s;
-    }
+    location ^~ /.well-known/acme-challenge/ { root /var/lib/booru-pocket/acme; }
+    location / { return 301 $site_origin\$request_uri; }
 }
 NGINX
-fi
 ln -sfn "$site_config" /etc/nginx/sites-enabled/booru-pocket.conf
 nginx -t
 systemctl daemon-reload
@@ -114,8 +98,43 @@ if ! curl -fsS http://127.0.0.1:18737/healthz; then
  exit 1
 fi
 systemctl reload nginx
-# DNS A/AAAA must point here and inbound 80/443 must be allowed.
-certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email --redirect -d "$site_domain"
+# DNS A/AAAA must point here. Keep the existing VPN service on 443.
+if command -v ufw >/dev/null && ufw status | grep -q 'Status: active'; then
+ ufw allow 80/tcp
+ ufw allow "$site_port/tcp"
+fi
+certbot certonly --webroot -w /var/lib/booru-pocket/acme --cert-name "$site_domain" --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring -d "$site_domain" --deploy-hook 'systemctl reload nginx'
+cat >> "$site_config" <<NGINX
+server {
+    listen $site_port ssl;
+    server_name $site_domain;
+    ssl_certificate /etc/letsencrypt/live/$site_domain/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$site_domain/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 16k;
+    location / {
+        proxy_pass http://127.0.0.1:18737;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Forwarded-For \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 35s;
+        proxy_send_timeout 15s;
+    }
+    location = /api/posts {
+        access_log off;
+        proxy_pass http://127.0.0.1:18737;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Forwarded-For \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 35s;
+        proxy_send_timeout 15s;
+    }
+}
+NGINX
+nginx -t
+systemctl reload nginx
 systemctl enable --now certbot.timer
-curl -fsS "https://$site_domain/healthz"
-printf '\nReady: https://%s/\nBackup: %s\n' "$site_domain" "$backup"
+curl -fsS "$site_origin/healthz"
+printf '\nReady: %s/\nBackup: %s\n' "$site_origin" "$backup"

@@ -2,7 +2,7 @@
 
 ## Browser hosting
 
-The project is moving from GitHub Pages to `https://frank.eben-cord.ru/`. The new Node server serves the existing interface and forwards API requests through the same origin, so browser API requests do not depend on provider CORS. Media still loads directly from the source. See [server installation and verification](deploy/README.md). Android and static files remain available in source. Earlier Pages/build verification below describes the previous deployment.
+The project is moving from GitHub Pages to `https://frank.eben-cord.ru:8443/`. The new Node server serves the existing interface and forwards API requests through the same origin, so browser API requests do not depend on provider CORS. Media still loads directly from the source. See [server installation and verification](deploy/README.md). Android and static files remain available in source. Earlier Pages/build verification below describes the previous deployment.
 
 Android API client with a shared static web interface. No media proxy, account service, analytics, or third-party runtime JavaScript dependencies. Browser hosting now includes a small API gateway.
 
