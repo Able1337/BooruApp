@@ -4,6 +4,7 @@ import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {isIP} from 'node:net';
+import {parseTagPayload,normalizeSuggestions} from '../web/core.mjs';
 
 const ROOT = fileURLToPath(new URL('../web/',import.meta.url));
 const MAX_BODY = 16384, MAX_RESPONSE = 4 * 1024 * 1024;
@@ -37,8 +38,8 @@ export function checkedTarget(value,operation='posts') {
       if(u.hostname==='danbooru.donmai.us'){allowed.push('search[order]');if(p.get('search[order]')!=='count')throw new Error('invalid');}
     }else{
       if(u.pathname!=='/index.php')throw new Error('invalid');
-      for(const[k,v]of Object.entries({page:'dapi',s:'tag',q:'index',json:'1',orderby:'count'}))if(p.get(k)!==v)throw new Error('invalid');
-      allowed.push('page','s','q','json','name_pattern','orderby','limit');prefix=p.get('name_pattern');
+      for(const[k,v]of Object.entries({page:'dapi',s:'tag',q:'index',json:'1',orderby:'count',order:'desc'}))if(p.get(k)!==v)throw new Error('invalid');
+      allowed.push('page','s','q','json','name_pattern','orderby','order','limit');prefix=p.get('name_pattern');
     }
     if(!prefix||prefix.length>100||/\s/.test(prefix))throw new Error('invalid');
     if(p.has('limit')&&(!/^\d+$/.test(p.get('limit'))||+p.get('limit')<1||+p.get('limit')>20))throw new Error('invalid');
@@ -95,8 +96,8 @@ export function createApp({upstream=fetch,publicOrigin=process.env.PUBLIC_ORIGIN
           }
           const chunks=[];let length=0;
           for await(const chunk of response.body){length+=chunk.length;if(length>MAX_RESPONSE)throw new Error('size');chunks.push(chunk);}
-          const text=Buffer.concat(chunks).toString('utf8');
-          try{JSON.parse(text);}catch{return send(res,502,{error:'Источник вернул не JSON. Возможно, требуется проверка доступа на стороне источника.'});}
+          let text=Buffer.concat(chunks).toString('utf8');
+          try{if(req.url==='/api/tags')text=JSON.stringify(normalizeSuggestions(parseTagPayload(text)));else JSON.parse(text);}catch{return send(res,502,{error:'Источник вернул не JSON. Возможно, требуется проверка доступа на стороне источника.'});}
           return send(res,200,text);
         }catch(e){return send(res,502,{error:e.name==='TimeoutError'||e.name==='AbortError'?'Сервер не дождался API источника. Повтори позже.':'Сервер не смог получить ответ API источника.'});}
         finally{active--;}

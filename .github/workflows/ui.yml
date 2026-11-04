@@ -1,6 +1,9 @@
 name: Check browser UI
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['web/**', 'server/**', 'scripts/ui-smoke.mjs', '.github/workflows/ui.yml']
   pull_request:
     paths: ['web/**', 'server/**', 'scripts/ui-smoke.mjs']
 permissions:

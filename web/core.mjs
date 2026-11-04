@@ -134,7 +134,7 @@ export function makeSuggestionsRequest(source, prefix) {
   const u=new URL(source.kind==='e621'?'tags/autocomplete.json':source.kind==='danbooru'?'tags.json':'index.php',root.href.endsWith('/')?root.href:root.href+'/');
   if(source.kind==='danbooru'){u.searchParams.set('search[name_matches]',clean+'*');u.searchParams.set('search[order]','count');u.searchParams.set('limit','10');}
   else if(source.kind==='e621'){u.searchParams.set('search[name_matches]',clean);u.searchParams.set('limit','10');}
-  else for(const[k,v]of Object.entries({page:'dapi',s:'tag',q:'index',json:'1',name_pattern:clean+'%',limit:'10',orderby:'count'}))u.searchParams.set(k,v);
+  else for(const[k,v]of Object.entries({page:'dapi',s:'tag',q:'index',json:'1',name_pattern:clean+'%',limit:'10',orderby:'count',order:'desc'}))u.searchParams.set(k,v);
   credentials(u,source);return u.href;
 }
 export function normalizeSuggestions(payload) {
@@ -182,4 +182,17 @@ export function normalizeTagGroups(post,flatTags=[]) {
     }
   }
   add('general',flatTags);return groups;
+}
+
+export function parseTagPayload(text) {
+  try{return JSON.parse(text);}catch{}
+  if(!/^\s*(?:<\?xml[^>]*>\s*)?<tags(?:\s|>|\/)/.test(text))throw new Error('Ответ подсказок не распознан');
+  const decode=value=>value.replace(/&(?:amp|lt|gt|quot|apos);/g,x=>({'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&apos;':"'"})[x]);
+  const rows=[];
+  for(const match of text.matchAll(/<tag\b([^>]*)>/g)){
+    const fields={};for(const attr of match[1].matchAll(/([a-z_]+)="([^"]*)"/g))fields[attr[1]]=decode(attr[2]);
+    if(fields.name)rows.push({name:fields.name,count:Number(fields.count)||0,category:Number(fields.type)||0});
+    if(rows.length>=20)break;
+  }
+  return rows;
 }

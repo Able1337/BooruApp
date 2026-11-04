@@ -1,4 +1,4 @@
-import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag} from './core.mjs';
+import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload} from './core.mjs';
 const $=id=>document.getElementById(id);
 const el=(tag,cls='',text='')=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text)n.textContent=text;return n;};
 const button=(text,cls,action)=>{const n=el('button',cls,text);n.type='button';n.onclick=action;return n;};
@@ -29,15 +29,15 @@ function count(){ $('savedCount').textContent=String(saved.length); }
 function isSaved(p){return saved.some(x=>x.key===p.key);}
 window.addEventListener('message',event=>{
   if(event.data!=='booru-native-v1'||!event.ports?.[0]||port)return;
-  port=event.ports[0];port.onmessage=message=>{let r;try{r=JSON.parse(message.data);}catch{return;}const p=pending.get(r.id);if(!p)return;clearTimeout(p.timer);pending.delete(r.id);if(r.error)p.reject(new Error(r.error));else try{p.resolve(JSON.parse(r.body));}catch{p.reject(new Error('Ответ API не является JSON'));}};
+  port=event.ports[0];port.onmessage=message=>{let r;try{r=JSON.parse(message.data);}catch{return;}const p=pending.get(r.id);if(!p)return;clearTimeout(p.timer);pending.delete(r.id);if(r.error)p.reject(new Error(r.error));else try{p.resolve(p.kind==='tags'?parseTagPayload(r.body):JSON.parse(r.body));}catch{p.reject(new Error('Ответ API не является JSON'));}};
   $('mode').textContent='ANDROID';if(tab==='feed')reload();
 });
-function nativeGet(url){return new Promise((resolve,reject)=>{const id=String(++serial);const timer=setTimeout(()=>{pending.delete(id);reject(new Error('Время ожидания API истекло'));},35000);pending.set(id,{resolve,reject,timer});try{port.postMessage(JSON.stringify({id,url}));}catch{clearTimeout(timer);pending.delete(id);reject(new Error('Соединение с Android потеряно. Перезагрузите интерфейс.'));}});}
+function nativeGet(url,kind){return new Promise((resolve,reject)=>{const id=String(++serial);const timer=setTimeout(()=>{pending.delete(id);reject(new Error('Время ожидания API истекло'));},35000);pending.set(id,{resolve,reject,timer,kind});try{port.postMessage(JSON.stringify({id,url}));}catch{clearTimeout(timer);pending.delete(id);reject(new Error('Соединение с Android потеряно. Перезагрузите интерфейс.'));}});}
 async function get(url,kind='posts'){
-  if(port)return nativeGet(url);
+  if(port)return nativeGet(url,kind);
   const options={credentials:'omit',signal:AbortSignal.timeout(30000)};
   if(serverApi){Object.assign(options,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});url='/api/'+kind;}
-  const response=await fetch(url,options);let data;try{data=await response.json();}catch{throw new Error('Источник вернул не JSON. Проверьте доступность API.');}
+  const response=await fetch(url,options);let data;try{data=kind==='tags'&&!serverApi?parseTagPayload(await response.text()):await response.json();}catch{throw new Error('Источник вернул не JSON. Проверьте доступность API.');}
   if(!response.ok)throw new Error(serverApi&&typeof data.error==='string'?data.error:'Источник вернул HTTP '+response.status);return data;
 }
 function renderSourceSelect(){

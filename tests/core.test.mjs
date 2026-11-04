@@ -85,3 +85,9 @@ test('explicit sort/order tags override default sorting and score filters are pr
  assert.equal(searchTags({...gel,kind:'danbooru'},parseTags('score:>=50'),'old'),'score:>=50 order:id_asc');
  assert.ok(metaSuggestions(gel,'score').some(x=>x.name==='score:>100'));assert.ok(metaSuggestions(gel,'sort').some(x=>x.name==='sort:score:desc'));
 });
+test('DAPI XML autocomplete is parsed without evaluating external entities',async()=>{
+ const {parseTagPayload,normalizeSuggestions}=await import('../web/core.mjs');
+ const xml='<?xml version="1.0"?><tags type="array"><tag name="landscape" count="123" type="0"/><tag name="artist_a" count="5" type="1"/></tags>';
+ assert.deepEqual(normalizeSuggestions(parseTagPayload(xml)),[{name:'landscape',count:123},{name:'artist_a',count:5}]);
+ assert.deepEqual(parseTagPayload('<tags type="array"/>'),[]);assert.throws(()=>parseTagPayload('<html>challenge</html>'));
+});
