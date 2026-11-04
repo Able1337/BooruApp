@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {createMediaRelay} from './media.mjs';
 import {readFile} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -58,10 +59,12 @@ function send(res,status,body,type='application/json; charset=utf-8') {
 async function readBody(req){let length=0;const parts=[];for await(const part of req){length+=part.length;if(length>MAX_BODY)throw new Error('body');parts.push(part);}return JSON.parse(Buffer.concat(parts).toString('utf8'));}
 export function createApp({upstream=fetch,publicOrigin=process.env.PUBLIC_ORIGIN||'',additionalOrigins=(process.env.ADDITIONAL_ORIGINS||'').split(',').filter(Boolean)}={}) {
   const allowedOrigins=new Set([publicOrigin,...additionalOrigins].filter(Boolean));
+  const relay=createMediaRelay(upstream,allowedOrigins);
   let active=0;
   const rates=new Map();
   return async(req,res)=>{
     try{
+      if(req.url?.split('?')[0]==='/media')return await relay(req,res);
       if(req.url==='/healthz'&&req.method==='GET')return send(res,200,{ok:true});
       if(req.url==='/api/posts'||req.url==='/api/tags'){
         if(req.method!=='POST')return send(res,405,{error:'Разрешён только POST'});

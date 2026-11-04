@@ -46,6 +46,16 @@ server {
         proxy_read_timeout 35s;
         proxy_send_timeout 15s;
     }
+    location = /media {
+        access_log off;
+        proxy_pass http://127.0.0.1:18737;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Forwarded-For \$remote_addr;
+        proxy_set_header X-Forwarded-For \$remote_addr;
+        proxy_buffering off;
+        proxy_read_timeout 125s;
+    }
     location = /api/posts {
         access_log off;
         proxy_pass http://127.0.0.1:18737;

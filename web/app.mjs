@@ -1,4 +1,4 @@
-import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource} from './core.mjs';
+import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource,mediaUrl} from './core.mjs';
 const $=id=>document.getElementById(id);
 const el=(tag,cls='',text='')=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text)n.textContent=text;return n;};
 const button=(text,cls,action)=>{const n=el('button',cls,text);n.type='button';n.onclick=action;return n;};
@@ -21,10 +21,12 @@ const pending=new Map(),suggestionCache=new Map(),knownTags=new Map();
 const coverCache=new Map(),coverPending=new Set(),coverArts=new Map(),coverQueue=[];let coverActive=0,coverEpoch=0;
 const coverObserver=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){const c=collections.find(c=>c.id===entry.target.dataset.collectionId);if(c)requestCollectionCover(c);coverObserver.unobserve(entry.target);}},{rootMargin:'200px'});
 const serverApi=document.querySelector('meta[name="booru-api"]')?.content==='same-origin';
+let mediaRelay=read('bp.mediaRelay',{});if(!mediaRelay||typeof mediaRelay!=='object')mediaRelay={};
+const displayMedia=url=>serverApi?mediaUrl(url,mediaRelay):url;
 const source=()=>sources.find(s=>s.id===activeId)||sources[0];
 function persistSources(){persist('bp.sources',sources);persist('bp.activeId',activeId);persist('bp.source',source());}
 function mark(s){const t=sourceTemplate(s);const n=el('span','source-mark',t.mark);n.dataset.color=t.color;return n;}
-function coverImage(url){const u=httpsUrl(url);if(!u)return null;const image=el('img','card-cover');image.src=u;image.alt='';image.loading='lazy';image.onerror=()=>image.remove();return image;}
+function coverImage(url){const u=httpsUrl(url);if(!u)return null;const image=el('img','card-cover');image.src=displayMedia(u);image.alt='';image.loading='lazy';image.onerror=()=>image.remove();return image;}
 function closeDialog(id){$(id).close();}
 function pauseMedia(){const v=$('media').querySelector('video');if(v)v.pause();}
 function closeViewer(){pauseMedia();closeDialog('viewer');}
@@ -200,9 +202,9 @@ function renderPosts(items=posts,append=false){
     const card=el('article','post');const s=sources.find(x=>x.id===p.sourceId)||{name:p.source,base:p.page||p.file};
     const head=el('div','post-head');head.append(mark(s),el('span','',p.source||source().name),el('span','post-id','#'+p.id));card.append(head);
     let media;
-    if(p.video&&view==='list'){media=el('div','post-media');const video=el('video');video.src=p.file;video.poster=p.preview;video.controls=true;video.playsInline=true;video.preload='none';media.append(video);}
-    else {media=view==='grid'?button('','post-media',()=>openPost(posts.findIndex(x=>x.key===p.key))):el('div','post-media');if(view==='grid')media.setAttribute('aria-label','Открыть пост '+p.id);const image=el('img');image.src=view==='grid'?p.preview:(p.sample||p.file);image.alt=p.tags.slice(0,8).join(', ');image.loading='lazy';image.decoding='async';image.style.aspectRatio=p.width+'/'+p.height;let fallback=false;image.onerror=()=>{if(!fallback&&image.src!==p.preview){fallback=true;image.src=p.preview;}else image.alt='Медиа недоступно — откройте оригинал';};media.append(image);if(p.video)media.append(el('span','video-badge','▶ VIDEO'));}
-    card.append(media);const footer=el('div','post-footer');const save=button(isSaved(p)?'♥':'♡',isSaved(p)?'saved':'',()=>toggleFavorite(p));save.dataset.favoriteKey=p.key;save.setAttribute('aria-label',isSaved(p)?'Убрать из сохранённых':'Сохранить пост');let open;if(view==='grid')open=button('Открыть','view-label',()=>openPost(posts.findIndex(x=>x.key===p.key)));else{open=el('a','post-original','Оригинал ↗');open.href=p.file;open.target='_blank';open.rel='noopener noreferrer';}
+    if(p.video&&view==='list'){media=el('div','post-media');const video=el('video');video.src=displayMedia(p.file);video.poster=displayMedia(p.preview);video.controls=true;video.playsInline=true;video.preload='none';media.append(video);}
+    else {media=view==='grid'?button('','post-media',()=>openPost(posts.findIndex(x=>x.key===p.key))):el('div','post-media');if(view==='grid')media.setAttribute('aria-label','Открыть пост '+p.id);const image=el('img');image.src=displayMedia(view==='grid'?p.preview:(p.sample||p.file));image.alt=p.tags.slice(0,8).join(', ');image.loading='lazy';image.decoding='async';image.style.aspectRatio=p.width+'/'+p.height;const primary=view==='grid'?p.preview:(p.sample||p.file);let fallback=false;image.onerror=()=>{if(!fallback&&primary!==p.preview){fallback=true;image.src=displayMedia(p.preview);}else image.alt='Медиа недоступно — откройте оригинал';};media.append(image);if(p.video)media.append(el('span','video-badge','▶ VIDEO'));}
+    card.append(media);const footer=el('div','post-footer');const save=button(isSaved(p)?'♥':'♡',isSaved(p)?'saved':'',()=>toggleFavorite(p));save.dataset.favoriteKey=p.key;save.setAttribute('aria-label',isSaved(p)?'Убрать из сохранённых':'Сохранить пост');let open;if(view==='grid')open=button('Открыть','view-label',()=>openPost(posts.findIndex(x=>x.key===p.key)));else{open=el('a','post-original','Оригинал ↗');open.href=displayMedia(p.file);open.target='_blank';open.rel='noopener noreferrer';}
     footer.append(save,open,el('span','post-score','↑ '+p.score));card.append(footer);
     const details=el('details','inline-tags');details.append(el('summary','','Теги · '+p.tags.length));const tags=el('div','grouped-tags');renderGroupedTags(tags,p,openTagAction);details.append(tags);card.append(details);fragment.append(card);
   }
@@ -223,23 +225,24 @@ function applyTagAction(excluded){
 }
 function openPost(index){
   if(index<0||index>=posts.length)return;current=index;const p=posts[index];pauseMedia();$('media').replaceChildren();
-  const media=el(p.video?'video':'img');media.src=p.video?p.file:(p.sample||p.file);if(p.video){media.controls=true;media.playsInline=true;media.loop=true;}else media.alt=p.tags.join(', ');
-  $('media').append(media);$('viewerSource').textContent=(p.source||'Booru')+' / #'+p.id;$('original').href=p.file;$('savePost').textContent=isSaved(p)?'♥ Пост сохранён':'♡ Сохранить пост';$('tags').replaceChildren();
+  const media=el(p.video?'video':'img');media.src=displayMedia(p.video?p.file:(p.sample||p.file));if(p.video){media.controls=true;media.playsInline=true;media.loop=true;}else media.alt=p.tags.join(', ');
+  $('media').append(media);$('viewerSource').textContent=(p.source||'Booru')+' / #'+p.id;$('original').href=displayMedia(p.file);$('savePost').textContent=isSaved(p)?'♥ Пост сохранён':'♡ Сохранить пост';$('tags').replaceChildren();
   renderGroupedTags($('tags'),p,openTagAction);
   $('previous').disabled=index===0;$('next').disabled=index===posts.length-1;if(!$('viewer').open)$('viewer').showModal();
 }
 function applyTemplate(t){
-  $('sourceTitle').value=t.name;$('sourceBase').value=t.base;$('sourceKind').value=t.kind;$('sourceUser').value='';$('sourceKey').value='';updateSourceHint();
+  $('sourceTitle').value=t.name;$('sourceBase').value=t.base;$('sourceKind').value=t.kind;$('sourceUser').value='';$('sourceKey').value='';$('sourceMediaRelay').checked=mediaRelay[t.id]===true;updateSourceHint();
 }
 function updateSourceHint(){
   const kind=$('sourceKind').value;$('sourceUserLabel').textContent=kind==='gelbooru'?'User ID':'Логин';
   const t=sourceTemplate({base:$('sourceBase').value,name:$('sourceTitle').value});$('sourceHint').textContent=t?.hint||'Сервер поддерживает Safebooru, Rule34, Gelbooru, Danbooru и e621.';
+  $('sourceMediaRow').hidden=!serverApi||!['gelbooru','e621'].includes(t?.id);
   for(const n of $('sourceTemplates').querySelectorAll('button'))n.classList.toggle('active',n.dataset.template===t?.id);
 }
 function openSource(id=null){
   editingSource=id;$('sourceEditorTitle').textContent=id?'Изменить booru':'Добавить booru';$('sourceError').hidden=true;$('deleteSource').hidden=!id;$('deleteSource').disabled=sources.length===1;$('deleteSource').title=sources.length===1?'Нужен хотя бы один источник':'';
   $('sourceTemplates').replaceChildren();for(const t of SOURCE_TEMPLATES){const n=button('','template-button',()=>applyTemplate(t));n.dataset.template=t.id;n.append(mark(t),el('span','',t.name));$('sourceTemplates').append(n);}
-  const s=sources.find(s=>s.id===id);if(s){$('sourceTitle').value=s.name;$('sourceBase').value=s.base;$('sourceKind').value=s.kind;$('sourceUser').value=s.kind==='gelbooru'?s.userId||'':s.login||s.userId||'';$('sourceKey').value=s.apiKey||'';updateSourceHint();}else applyTemplate(SOURCE_TEMPLATES[0]);
+  const s=sources.find(s=>s.id===id);if(s){$('sourceTitle').value=s.name;$('sourceBase').value=s.base;$('sourceKind').value=s.kind;$('sourceUser').value=s.kind==='gelbooru'?s.userId||'':s.login||s.userId||'';$('sourceKey').value=s.apiKey||'';$('sourceMediaRelay').checked=mediaRelay[sourceTemplate(s).id]===true;updateSourceHint();}else applyTemplate(SOURCE_TEMPLATES[0]);
   if($('settings').open)closeDialog('settings');$('sourceEditor').showModal();
 }
 $('sourceForm').onsubmit=e=>{
@@ -248,6 +251,7 @@ $('sourceForm').onsubmit=e=>{
   if(!editingSource&&sources.length>=30){$('sourceError').textContent='Можно сохранить до 30 источников.';$('sourceError').hidden=false;return;}
   const user=$('sourceUser').value.trim();if(kind==='gelbooru'&&user&&!/^\d+$/.test(user)){$('sourceError').textContent='User ID — только число из настроек API аккаунта.';$('sourceError').hidden=false;return;}
   const s={id:editingSource||uid('source'),name,base,kind,userId:kind==='gelbooru'?user:'',login:kind!=='gelbooru'?user:'',apiKey:$('sourceKey').value.trim()};
+  const provider=sourceTemplate(s).id;if(serverApi&&['gelbooru','e621'].includes(provider)){mediaRelay[provider]=$('sourceMediaRelay').checked;persist('bp.mediaRelay',mediaRelay);}
   sources=editingSource?sources.map(x=>x.id===editingSource?s:x):[...sources,s];activeId=s.id;invalidateCollectionCovers(true);persistSources();closeDialog('sourceEditor');suggestionCache.clear();renderHome();if(tab==='feed')reload();else updateView();
 };
 $('deleteSource').onclick=()=>{if(sources.length===1)return;invalidateCollectionCovers();sources=sources.filter(s=>s.id!==editingSource);if(activeId===editingSource)activeId=sources[0].id;persistSources();closeDialog('sourceEditor');renderHome();if(tab==='feed')reload();};

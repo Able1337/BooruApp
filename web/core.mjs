@@ -86,10 +86,11 @@ export function sanitizeSources(data,legacy) {
   }
   return result.length?result:[fallback];
 }
+function canonicalTag(value){return /^(score|sort|order|rating):/i.test(value)?value.toLowerCase():value;}
 export function parseTags(query) {
   const map=new Map();
   for(const raw of String(query||'').trim().split(/\s+/).filter(Boolean).slice(0,80)){
-    const excluded=raw.startsWith('-'),value=(excluded?raw.slice(1):raw).slice(0,150);
+    const excluded=raw.startsWith('-'),value=canonicalTag((excluded?raw.slice(1):raw).slice(0,150));
     if(value){if(/^(sort|order):/.test(value))for(const key of map.keys())if(/^(sort|order):/.test(key))map.delete(key);map.set(value,{value,excluded});}
   }
   return [...map.values()];
@@ -97,10 +98,11 @@ export function parseTags(query) {
 export function tagsQuery(tags) { return tags.map(t=>(t.excluded?'-':'')+t.value).join(' '); }
 export function mergeTags(current, incoming) { const map=new Map(current.map(t=>[t.value,t]));for(const t of incoming){if(/^(sort|order):/.test(t.value))for(const key of map.keys())if(/^(sort|order):/.test(key))map.delete(key);map.set(t.value,t);}return [...map.values()].slice(0,80); }
 export function sortFromTag(value) {
-  const raw=String(value||'').replace(/^(sort|order):/,'');
+  const raw=String(value||'').toLowerCase().replace(/^(sort|order):/,'');
   return ({score:'score','score:desc':'score',score_desc:'score','score:asc':'score_asc',score_asc:'score_asc',random:'random',new:'new',id:'new','id:desc':'new',id_desc:'new','id:asc':'old',id_asc:'old'})[raw]||null;
 }
 export function searchTags(source,tags,sort='new') {
+  tags=tags.map(t=>({...t,value:canonicalTag(t.value)}));
   const isOrder=t=>/^(sort|order):/.test(t.value);
   const explicit=tags.filter(t=>isOrder(t)&&!t.excluded).at(-1);
   const query=tags.filter(t=>!isOrder(t));
@@ -111,6 +113,7 @@ export function searchTags(source,tags,sort='new') {
   return [tagsQuery(query),suffix].filter(Boolean).join(' ');
 }
 export function metaSuggestions(source,prefix) {
+  prefix=prefix.toLowerCase();
   if(!/^(score|sort|order)(:|$)/.test(prefix))return [];
   const order=prefix.startsWith('sort')?'sort':prefix.startsWith('order')?'order':source.kind==='gelbooru'?'sort':'order';
   const names=prefix.startsWith('score')?['score:>100','score:>500','score:>=50','score:<100']:order==='sort'?['sort:score:desc','sort:score:asc','sort:random','sort:id:desc','sort:id:asc']:['order:score','order:score_asc','order:random','order:id_desc','order:id_asc'];
@@ -203,3 +206,16 @@ export function groupCollectionsBySource(collections,sources) {
   for(const c of collections){const id=c.sourceId==='*'?'*':known.has(c.sourceId)?c.sourceId:null;if(!buckets.has(id))buckets.set(id,[]);buckets.get(id).push(c);}
   return [...sources.map(s=>({id:s.id,name:s.name})),{id:'*',name:'Общие коллекции'},{id:null,name:'Источник удалён'}].filter(g=>buckets.has(g.id)).map(g=>({...g,items:buckets.get(g.id)}));
 }
+
+// Only public media paths on these providers' fixed CDN hosts may be relayed.
+export function mediaTarget(value){
+  if(typeof value!=='string'||value.length>2048)return null;
+  try{
+    const u=new URL(value);
+    if(u.protocol!=='https:'||u.username||u.password||u.port||u.search||u.hash)return null;
+    const provider=/^img[1-9][0-9]?\.gelbooru\.com$/.test(u.hostname)?'gelbooru':/^static[1-9][0-9]?\.e621\.net$/.test(u.hostname)?'e621':null;
+    const path=provider==='gelbooru'?/^\/+(images|samples|thumbnails)\/[a-zA-Z0-9/_-]+\.(jpe?g|png|gif|webp|avif|webm|mp4)$/:/^\/data\/(?:preview\/|sample\/)?[a-f0-9]{2}\/[a-f0-9]{2}\/[a-f0-9]{32}\.(jpe?g|png|gif|webp|avif|webm|mp4)$/;
+    return provider&&path.test(u.pathname)?{url:u.href,provider}:null;
+  }catch{return null;}
+}
+export function mediaUrl(value,enabled={}){const target=mediaTarget(value);return target&&enabled[target.provider]===true?'/media?url='+encodeURIComponent(target.url):value;}

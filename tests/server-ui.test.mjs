@@ -12,3 +12,10 @@ test('autocomplete, included and excluded chips and search use the selected prov
  $('selectedTags').children[0].querySelector('.exclude-toggle').click();await app.tick();assert.equal(new URL(JSON.parse(requests.at(-1).options.body).url).searchParams.get('tags'),'-long_hair sky');
  $('selectedTags').children[0].querySelector('.tag-name').click();await app.tick();assert.equal(new URL(JSON.parse(requests.at(-1).options.body).url).searchParams.get('tags'),'sky');
 });
+test('optional media relay routes Gelbooru feed and viewer while stored favorites retain original URLs',async t=>{
+ const media='https://img4.gelbooru.com/images/ab/cd/example.jpg';
+ const app=await setup({server:true,storage:{'bp.source':{name:'Gelbooru',kind:'gelbooru',base:'https://gelbooru.com/'},'bp.mediaRelay':{gelbooru:true}},fetcher:async()=>({ok:true,json:async()=>[{id:1,file_url:media,preview_url:media,width:100,height:100,tags:'sky'}]})});t.after(app.cleanup);
+ const{$}=app;$('searchForm').onsubmit({preventDefault(){}});await app.tick();
+ assert.equal($('grid').querySelector('img').src,'/media?url='+encodeURIComponent(media));
+ $('grid').querySelector('.post-footer').children[0].click();assert.equal(JSON.parse(app.memory.get('bp.saved'))[0].file,media);
+});
