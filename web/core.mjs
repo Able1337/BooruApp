@@ -89,12 +89,12 @@ export function parseTags(query) {
   const map=new Map();
   for(const raw of String(query||'').trim().split(/\s+/).filter(Boolean).slice(0,80)){
     const excluded=raw.startsWith('-'),value=(excluded?raw.slice(1):raw).slice(0,150);
-    if(value)map.set(value,{value,excluded});
+    if(value){if(/^(sort|order):/.test(value))for(const key of map.keys())if(/^(sort|order):/.test(key))map.delete(key);map.set(value,{value,excluded});}
   }
   return [...map.values()];
 }
 export function tagsQuery(tags) { return tags.map(t=>(t.excluded?'-':'')+t.value).join(' '); }
-export function mergeTags(current, incoming) { const map=new Map(current.map(t=>[t.value,t]));for(const t of incoming)map.set(t.value,t);return [...map.values()].slice(0,80); }
+export function mergeTags(current, incoming) { const map=new Map(current.map(t=>[t.value,t]));for(const t of incoming){if(/^(sort|order):/.test(t.value))for(const key of map.keys())if(/^(sort|order):/.test(key))map.delete(key);map.set(t.value,t);}return [...map.values()].slice(0,80); }
 export function sortFromTag(value) {
   const raw=String(value||'').replace(/^(sort|order):/,'');
   return ({score:'score','score:desc':'score',score_desc:'score','score:asc':'score_asc',score_asc:'score_asc',random:'random',new:'new',id:'new','id:desc':'new',id_desc:'new','id:asc':'old',id_asc:'old'})[raw]||null;

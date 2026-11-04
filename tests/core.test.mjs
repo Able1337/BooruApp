@@ -91,3 +91,8 @@ test('DAPI XML autocomplete is parsed without evaluating external entities',asyn
  assert.deepEqual(normalizeSuggestions(parseTagPayload(xml)),[{name:'landscape',count:123},{name:'artist_a',count:5}]);
  assert.deepEqual(parseTagPayload('<tags type="array"/>'),[]);assert.throws(()=>parseTagPayload('<html>challenge</html>'));
 });
+test('a newly selected sort filter replaces the previous sort or order filter',async()=>{
+ const {parseTags,mergeTags,tagsQuery}=await import('../web/core.mjs');
+ assert.equal(tagsQuery(mergeTags(parseTags('sky sort:score:desc'),parseTags('order:random'))),'sky order:random');
+ assert.equal(tagsQuery(parseTags('sky sort:score:desc sort:random')),'sky sort:random');
+});
