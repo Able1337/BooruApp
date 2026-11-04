@@ -2,6 +2,12 @@
 
 Android API client with a shared static web interface. No application server, media proxy, account service, analytics, or runtime JavaScript dependencies.
 
+## Verified GitHub build (2026-11-04)
+
+Source is uploaded to `main`. [APK build and signature verification passed](https://github.com/Able1337/BooruApp/actions/runs/41845545330), including all 9 tests. [Download the APK artifact](https://github.com/Able1337/BooruApp/actions/runs/41845545330/artifacts/13332061051) and unpack the ZIP (artifact retention is 30 days). [Pages deployment passed](https://github.com/Able1337/BooruApp/actions/runs/41845303772); UI: https://able1337.github.io/BooruApp/.
+
+This APK uses a newly generated temporary development key, not the original v0.1 key. It cannot update the earlier installation, and a later Actions run will use another key until persistent signing secrets are configured. No private signing key was committed. Real Android/WebView execution, live API/media loading and device import/export remain untested. VALIDATION.md records the earlier local-only verification before GitHub access was restored; its repository/build/Pages blockers have now been resolved through Actions. SDK setup explicitly excludes the removed `tools` package.
+
 ## Version 0.1.1
 
 - Masonry feed, tag search, paginated loading, image/GIF/video viewer.
