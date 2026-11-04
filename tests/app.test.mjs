@@ -66,3 +66,12 @@ test('each booru section creates new collections preselected for that booru',asy
  groups[0].querySelector('.soft-button').click();assert.equal(app.$('collectionSource').value,'rule');app.$('collectionClose').click();
  groups[1].querySelector('.soft-button').click();assert.equal(app.$('collectionSource').value,'*');
 });
+test('post tag clicks ask whether to include or exclude without changing search until a choice is made',async t=>{
+ const app=await setup({server:true,fetcher:async()=>({ok:true,json:async()=>[{id:1,file_url:'https://example.org/sky.jpg',preview_url:'https://example.org/p.jpg',tags:'sky'}]})});t.after(app.cleanup);const{$,requests}=app;
+ $('feedTab').click();await app.tick();const first=()=> $('grid').querySelector('.post-tags').children[0];
+ first().click();assert.equal($('tagActionDialog').open,true);assert.equal($('tagActionName').textContent,'sky');assert.equal(requests.length,1);
+ $('tagActionExclude').click();await app.tick();assert.equal($('tagActionDialog').open,false);assert.equal(new URL(JSON.parse(requests.at(-1).options.body).url).searchParams.get('tags'),'-sky');
+ first().click();$('tagActionInclude').click();await app.tick();assert.equal(new URL(JSON.parse(requests.at(-1).options.body).url).searchParams.get('tags'),'sky');assert.equal($('selectedTags').children.length,1);
+ $('gridView').click();$('grid').querySelector('.view-label').click();$('tags').querySelector('.post-tags').children[0].click();const before=requests.length;$('tagActionClose').click();assert.equal($('viewer').open,true);assert.equal(requests.length,before);
+ $('tags').querySelector('.post-tags').children[0].click();$('tagActionExclude').click();await app.tick();assert.equal($('viewer').open,false);assert.equal(new URL(JSON.parse(requests.at(-1).options.body).url).searchParams.get('tags'),'-sky');
+});
