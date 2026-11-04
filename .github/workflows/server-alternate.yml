@@ -1,14 +1,11 @@
 name: Deploy server alternate runner
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/server-alternate.yml']
 permissions:
   contents: read
 concurrency:
   group: booru-server
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   deploy:
     runs-on: windows-latest

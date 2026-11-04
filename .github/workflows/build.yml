@@ -2,7 +2,7 @@ name: Build APK
 on:
   push:
     branches: [main]
-    paths-ignore: ['README.md']
+    paths: ['android/**', 'scripts/build-apk.sh', '.github/workflows/build.yml']
   pull_request:
     branches: [main]
   workflow_dispatch:
