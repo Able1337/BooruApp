@@ -28,3 +28,14 @@ test('favorites reject unsafe stored media and sanitize sample URLs',async()=>{
  assert.deepEqual(sanitizeFavorites([{...p,file:'javascript:alert(1)'},null]),[]);
  assert.throws(()=>sanitizeFavorites({}));
 });
+test('Rule34 DAPI uses API host while preserving source identity and escaped credentials',()=>{
+ for(const base of ['https://rule34.xxx/','https://www.rule34.xxx/','https://api.rule34.xxx/']){
+  const source={...gel,base,userId:'123',apiKey:'test&key'};
+  const u=new URL(makeRequest(source,'landscape',0));
+  assert.equal(u.hostname,'api.rule34.xxx');assert.equal(u.pathname,'/index.php');
+  assert.equal(u.searchParams.get('api_key'),'test&key');assert.equal(u.searchParams.get('user_id'),'123');
+  assert.equal(source.base,base);
+ }
+ const regular=new URL(makeRequest({...gel,base:'https://rule34.xxx.example.org/'},'',0));
+ assert.equal(regular.hostname,'rule34.xxx.example.org');
+});

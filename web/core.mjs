@@ -5,7 +5,13 @@ export function httpsUrl(value, base) {
 export function makeRequest(source, tags, page, limit = 30) {
   const base = httpsUrl(source.base);
   if (!base) throw new Error('Адрес источника должен начинаться с https://');
-  const u = new URL(source.kind === 'danbooru' ? 'posts.json' : 'index.php', base.endsWith('/') ? base : base + '/');
+  const apiBase = new URL(base);
+  // Rule34 serves DAPI on a separate host; keep source.base for post links and favorite keys.
+  if (source.kind === 'gelbooru' && ['rule34.xxx', 'www.rule34.xxx'].includes(apiBase.hostname)) {
+    apiBase.hostname = 'api.rule34.xxx';
+  }
+  const apiRoot = apiBase.href;
+  const u = new URL(source.kind === 'danbooru' ? 'posts.json' : 'index.php', apiRoot.endsWith('/') ? apiRoot : apiRoot + '/');
   if (source.kind === 'danbooru') {
     u.searchParams.set('page', String(page + 1));
   } else {
