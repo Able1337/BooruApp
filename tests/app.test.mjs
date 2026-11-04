@@ -40,3 +40,23 @@ test('library export omits API keys and legacy favorites JSON still imports',asy
  await $('importSaved').onchange({target:{files:[{size:500,text:async()=>JSON.stringify([valid,{...valid,key:'evil',file:'javascript:alert(1)'}])}],value:'fake'}});
  assert.equal(JSON.parse(memory.get('bp.saved')).length,1);
 });
+test('collection covers load the first result for each exact query and source with bounded concurrency',async t=>{
+ const {setTimeout:delay}=await import('node:timers/promises');let active=0,maxActive=0;
+ const app=await setup({server:true,storage:{'bp.sources':[{id:'safe',name:'Safe',base:'https://safebooru.org/',kind:'gelbooru'},{id:'dan',name:'Dan',base:'https://danbooru.donmai.us/',kind:'danbooru'}],'bp.activeId':'safe','bp.collections':[{id:'a',name:'Landscape',query:'landscape',sourceId:'*',sort:'new'},{id:'b',name:'City',query:'city',sourceId:'*',sort:'score'},{id:'c',name:'Same query',query:'landscape',sourceId:'*',sort:'new'},{id:'d',name:'Night',query:'night',sourceId:'dan',sort:'new'}]},fetcher:async(url,options)=>{
+   const target=new URL(JSON.parse(options.body).url);assert.equal(target.searchParams.get('limit'),'1');active++;maxActive=Math.max(maxActive,active);await delay(5);active--;
+   const tag=target.searchParams.get('tags').split(' ')[0];return{ok:true,json:async()=>[{id:1,file_url:'https://example.org/'+tag+'.jpg',preview_url:'https://example.org/'+tag+'-preview.jpg',tags:tag}]};
+ }});t.after(app.cleanup);app.intersectCollections();await delay(60);
+ assert.equal(app.requests.length,3);assert.equal(maxActive,2);
+ const cards=app.$('collectionCards').children;
+ assert.equal(cards[0].querySelector('.card-cover').src,'https://example.org/landscape-preview.jpg');assert.equal(cards[1].querySelector('.card-cover').src,'https://example.org/city-preview.jpg');assert.equal(cards[2].querySelector('.card-cover').src,'https://example.org/landscape-preview.jpg');
+ const night=new URL(JSON.parse(app.requests.find(r=>JSON.parse(r.options.body).url.includes('night')).options.body).url);assert.equal(night.hostname,'danbooru.donmai.us');
+ cards[0].querySelector('.card-edit').click();app.$('collectionQuery').value='forest';app.$('collectionForm').onsubmit({preventDefault(){}});app.intersectCollections();await delay(40);
+ assert.equal(app.requests.length,4);assert.equal(app.$('collectionCards').children[0].querySelector('.card-cover').src,'https://example.org/forest-preview.jpg');
+});
+test('a late cover response cannot replace the cover after changing the active booru',async t=>{
+ const {setTimeout:delay}=await import('node:timers/promises');
+ const app=await setup({server:true,storage:{'bp.sources':[{id:'safe',name:'Safe',base:'https://safebooru.org/',kind:'gelbooru'},{id:'dan',name:'Dan',base:'https://danbooru.donmai.us/',kind:'danbooru'}],'bp.activeId':'safe','bp.collections':[{id:'a',name:'Sky',query:'sky',sourceId:'*',sort:'new'}]},fetcher:async(url,options)=>{
+  const old=JSON.parse(options.body).url.includes('safebooru.org');await delay(old?40:1);const file='https://example.org/'+(old?'old':'new')+'.jpg';return{ok:true,json:async()=>[{id:1,file_url:file,preview_url:file,tags:'sky'}]};
+ }});t.after(app.cleanup);app.intersectCollections();app.$('sourceSelect').value='dan';app.$('sourceSelect').onchange();app.intersectCollections();await delay(80);
+ assert.equal(app.$('collectionCards').children[0].querySelector('.card-cover').src,'https://example.org/new.jpg');
+});

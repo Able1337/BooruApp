@@ -20,14 +20,14 @@ async function context(viewport){
 let page;
 try{
  const c=await context({width:1280,height:960});page=await c.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto(url);await page.locator('.source-card').first().waitFor();
+ await page.goto(url);await page.locator('.source-card').first().waitFor();await page.waitForFunction(()=>document.querySelectorAll('#collectionCards .card-cover').length===4);
  await page.click('#addSource');await page.click('[data-template="e621"]');assert.equal(await page.inputValue('#sourceBase'),'https://e621.net/');await page.click('#sourceForm button[type=submit]');
  assert.equal(await page.locator('.source-card').count(),2);
  await page.selectOption('#sourceSelect','safebooru');await page.fill('#query','la');await page.locator('.suggestion').nth(1).waitFor();await page.locator('.suggestion').nth(1).click();
  assert.equal(await page.locator('.tag-chip').count(),1);
  await page.fill('#query','-city');await page.press('#query','Enter');await page.waitForFunction(()=>document.querySelectorAll('#grid .post').length===3);
  assert.equal(await page.locator('.post-media').first().evaluate(n=>n.tagName),'DIV');assert.equal(await page.locator('#viewer').evaluate(n=>n.open),false);
- assert.ok(await page.locator('.inline-tags .tag-group[data-group="artist"]').count());
+ assert.ok(await page.locator('.inline-tags .tag-group[data-group="artist"]').count());assert.equal(await page.locator('.inline-tags').first().evaluate(n=>n.open),false);await page.locator('.inline-tags summary').first().click();assert.equal(await page.locator('.inline-tags').first().evaluate(n=>n.open),true);
  await page.screenshot({path:'build/ui/desktop-list.png',fullPage:false});
  await page.click('#saveCollection');await page.fill('#collectionName','Мой поиск');await page.click('#collectionForm button[type=submit]');
  await page.click('#homeTab');await page.locator('.collection-card').first().waitFor();assert.match(await page.locator('.collection-card').first().innerText(),/Мой поиск/);
@@ -38,7 +38,7 @@ try{
  await page.click('#savePost');await page.click('#closeViewer');await page.click('#savedTab');assert.equal(await page.locator('#grid .post').count(),1);
  assert.deepEqual(errors,[]);await c.close();
  const mobile=await context({width:390,height:844});page=await mobile.newPage();const mobileErrors=[];page.on('pageerror',e=>mobileErrors.push(e.message));
- await page.goto(url);await page.locator('.source-card').first().waitFor();await page.screenshot({path:'build/ui/mobile-home.png',fullPage:true});
+ await page.goto(url);await page.locator('.source-card').first().waitFor();await page.waitForFunction(()=>document.querySelectorAll('#collectionCards .card-cover').length>=2);await page.locator('#collectionCards').evaluate(n=>{n.scrollLeft=n.scrollWidth;});await page.waitForFunction(()=>document.querySelectorAll('#collectionCards .card-cover').length===4);await page.locator('#collectionCards').evaluate(n=>{n.scrollLeft=0;});await page.screenshot({path:'build/ui/mobile-home.png',fullPage:true});
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
  await page.click('#feedTab');await page.waitForFunction(()=>document.querySelectorAll('#grid .post').length===3);
  await page.screenshot({path:'build/ui/mobile-list.png'});await page.evaluate(()=>scrollTo(0,500));assert.ok(await page.locator('.search-panel').evaluate(n=>n.getBoundingClientRect().top<2));

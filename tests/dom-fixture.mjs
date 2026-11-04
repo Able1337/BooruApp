@@ -24,11 +24,11 @@ export async function setup({storage={},server=false,fetcher=async()=>({ok:true,
  const memory=new Map(Object.entries(storage).map(([k,v])=>[k,JSON.stringify(v)]));
  globalThis.localStorage={getItem:k=>memory.get(k)??null,setItem:(k,v)=>memory.set(k,v)};
  const listeners={};globalThis.window={addEventListener:(type,cb)=>{listeners[type]=cb;},scrollTo(){}};
- globalThis.IntersectionObserver=class{observe(){}};
+ const observers=[];globalThis.IntersectionObserver=class{constructor(callback){this.callback=callback;this.targets=[];observers.push(this);}observe(n){this.targets.push(n);}unobserve(n){this.targets=this.targets.filter(x=>x!==n);}disconnect(){this.targets=[];}};
  const requests=[];globalThis.fetch=async(url,options)=>{requests.push({url,options});return fetcher(url,options);};
  const timer=globalThis.setTimeout;globalThis.setTimeout=(...args)=>{const t=timer(...args);if(Number(args[1])>=30000)t.unref();return t;};
  const files=[],create=URL.createObjectURL,revoke=URL.revokeObjectURL;
  URL.createObjectURL=blob=>{files.push(blob);return'blob:test';};URL.revokeObjectURL=()=>{};
  await import('../web/app.mjs?test='+Math.random());
- return{$,memory,requests,files,listeners,cleanup(){globalThis.setTimeout=timer;URL.createObjectURL=create;URL.revokeObjectURL=revoke;},tick:()=>new Promise(r=>setImmediate(r))};
+ return{$,memory,requests,files,listeners,intersectCollections(){for(const observer of observers){const targets=observer.targets.filter(n=>n.dataset.collectionId);if(targets.length)observer.callback(targets.map(target=>({target,isIntersecting:true})));}},cleanup(){globalThis.setTimeout=timer;URL.createObjectURL=create;URL.revokeObjectURL=revoke;},tick:()=>new Promise(r=>setImmediate(r))};
 }

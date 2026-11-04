@@ -120,7 +120,7 @@ export function sanitizeCollections(data) {
   const map=new Map();
   for(const p of data.slice(0,200)){
     if(!p||typeof p.id!=='string'||typeof p.name!=='string'||typeof p.query!=='string')continue;
-    map.set(p.id,{id:p.id.slice(0,100),name:p.name.slice(0,80),query:tagsQuery(parseTags(p.query)),sourceId:typeof p.sourceId==='string'?p.sourceId:'*',sort:['new','score','score_asc','random','old'].includes(p.sort)?p.sort:'new',cover:httpsUrl(p.cover)});
+    map.set(p.id,{id:p.id.slice(0,100),name:p.name.slice(0,80),query:tagsQuery(parseTags(p.query)),sourceId:typeof p.sourceId==='string'?p.sourceId:'*',sort:['new','score','score_asc','random','old'].includes(p.sort)?p.sort:'new',cover:httpsUrl(p.cover),coverKey:typeof p.coverKey==='string'?p.coverKey.slice(0,4096):'',coverCheckedAt:Number.isFinite(p.coverCheckedAt)?Math.min(Date.now(),Math.max(0,p.coverCheckedAt)):0});
   }
   return [...map.values()];
 }

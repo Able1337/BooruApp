@@ -17,6 +17,8 @@ if(!['new','score','score_asc','random','old'].includes(sort))sort='new';if(!['l
 let posts=[],page=0,busy=false,done=false,generation=0,current=0,editingSource=null,editingCollection=null,activeCollection=null;
 let port=null,serial=0,suggestionGeneration=0,suggestionTimer=null,suggestionActions=[],suggestionIndex=-1;
 const pending=new Map(),suggestionCache=new Map(),knownTags=new Map();
+const coverCache=new Map(),coverPending=new Set(),coverArts=new Map(),coverQueue=[];let coverActive=0,coverEpoch=0;
+const coverObserver=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){const c=collections.find(c=>c.id===entry.target.dataset.collectionId);if(c)requestCollectionCover(c);coverObserver.unobserve(entry.target);}},{rootMargin:'200px'});
 const serverApi=document.querySelector('meta[name="booru-api"]')?.content==='same-origin';
 const source=()=>sources.find(s=>s.id===activeId)||sources[0];
 function persistSources(){persist('bp.sources',sources);persist('bp.activeId',activeId);persist('bp.source',source());}
@@ -58,15 +60,52 @@ function renderHome(){
 }
 function collectionSourceName(c){return c.sourceId==='*'?'Любой booru':sources.find(s=>s.id===c.sourceId)?.name||'Источник удалён';}
 function renderCollections(){
+  coverObserver.disconnect();coverArts.clear();
   $('collectionCards').replaceChildren();$('collectionPicker').replaceChildren();
   for(const c of collections){
-    const card=el('article','collection-card');const main=button('','collection-card-main',()=>applyCollection(c));
-    const art=el('span','collection-art',c.sort==='score'?'✦':'#');const image=coverImage(c.cover);if(image)art.append(image);
+    const card=el('article','collection-card');card.dataset.collectionId=c.id;const main=button('','collection-card-main',()=>applyCollection(c));
+    const art=el('span','collection-art',c.sort==='score'?'✦':'#');coverArts.set(c.id,art);const descriptor=collectionCoverDescriptor(c);const image=descriptor&&c.coverKey===descriptor.key?coverImage(c.cover):null;if(image)art.append(image);
     const copy=el('span','collection-copy');copy.append(el('strong','',c.name),el('span','collection-query',c.query||'Все теги'),el('small','',collectionSourceName(c)));main.append(art,copy);
-    const edit=button('⋯','card-edit',()=>openCollection(c.id));edit.setAttribute('aria-label','Изменить коллекцию '+c.name);card.append(main,edit);$('collectionCards').append(card);
+    const edit=button('⋯','card-edit',()=>openCollection(c.id));edit.setAttribute('aria-label','Изменить коллекцию '+c.name);card.append(main,edit);$('collectionCards').append(card);coverObserver.observe(card);
     const pick=button('','collection-pick',()=>{closeDialog('collectionsDialog');applyCollection(c);});const text=el('span');text.append(el('strong','',c.name),el('small','',c.query||'Все теги'));pick.append(text);$('collectionPicker').append(pick);
   }
   if(!collections.length){$('collectionCards').append(el('p','hint','Сохраните текущий поиск — он появится здесь карточкой.'));$('collectionPicker').append(el('p','hint','Коллекций пока нет.'));}
+}
+function collectionCoverDescriptor(c){
+  const s=c.sourceId==='*'?source():sources.find(s=>s.id===c.sourceId);if(!s)return null;
+  const query=searchTags(s,parseTags(c.query),c.sort);
+  return {source:{...s},query,key:JSON.stringify([s.id,s.base,s.kind,s.userId||'',s.login||'',query])};
+}
+function invalidateCollectionCovers(reset=false){
+  coverEpoch++;coverQueue.length=0;coverPending.clear();
+  if(reset){coverCache.clear();for(const c of collections)c.coverCheckedAt=0;}
+}
+function updateCollectionArt(c,entry){
+  const art=coverArts.get(c.id);if(!art)return;art.querySelector('.card-cover')?.remove();
+  const image=coverImage(entry.url);if(image)art.append(image);art.title=entry.error||'';
+}
+function requestCollectionCover(c){
+  const d=collectionCoverDescriptor(c);if(!d)return;
+  const cached=coverCache.get(d.key)||(c.coverKey===d.key&&c.cover?{url:c.cover,at:c.coverCheckedAt||0}:null);
+  if(cached&&Date.now()-cached.at<(cached.error?30000:300000)){if(!cached.error&&(c.coverKey!==d.key||c.cover!==cached.url)){c.cover=cached.url;c.coverKey=d.key;c.coverCheckedAt=cached.at;persist('bp.collections',collections);}updateCollectionArt(c,cached);return;}
+  const id=coverEpoch+'|'+d.key;if(coverPending.has(id))return;
+  coverPending.add(id);coverQueue.push({...d,id,epoch:coverEpoch});drainCollectionCovers();
+}
+function drainCollectionCovers(){
+  while(coverActive<2&&coverQueue.length){const job=coverQueue.shift();coverActive++;loadCollectionCover(job).finally(()=>{coverActive--;coverPending.delete(job.id);drainCollectionCovers();});}
+}
+async function loadCollectionCover(job){
+  let entry;
+  try{const payload=await get(makeRequest(job.source,job.query,0,1));const first=normalizePosts(payload,job.source)[0];entry={url:first?.preview||'',at:Date.now()};}
+  catch{entry={url:'',at:Date.now(),error:'Обложка недоступна. Проверьте настройки API источника.'};}
+  if(job.epoch!==coverEpoch)return;
+  coverCache.set(job.key,entry);
+  let changed=false;
+  for(const c of collections){if(collectionCoverDescriptor(c)?.key!==job.key)continue;
+    if(!entry.error){c.cover=entry.url;c.coverKey=job.key;c.coverCheckedAt=entry.at;changed=true;}
+    updateCollectionArt(c,entry);
+  }
+  if(changed)persist('bp.collections',collections);
 }
 function updateView(){
   $('homeView').hidden=tab!=='home';$('feedView').hidden=tab==='home';$('viewToggle').hidden=tab==='home';
@@ -76,7 +115,7 @@ function updateView(){
   $('feedSubtitle').textContent=tab==='saved'?'Локальная библиотека публикаций':[new URL(source().base).hostname,sort==='score'?'По оценке':sort==='random'?'Случайные посты':'Сначала новые'].join(' · ');
 }
 function setActive(id,openFeed=false){
-  if(!sources.some(s=>s.id===id))return;activeId=id;activeCollection=null;persistSources();hideSuggestions();renderHome();
+  if(!sources.some(s=>s.id===id))return;invalidateCollectionCovers();activeId=id;activeCollection=null;persistSources();hideSuggestions();renderHome();
   if(openFeed){tab='feed';reload();}else if(tab==='feed')reload();else updateView();
 }
 function showTab(next){tab=next;hideSuggestions();if(next==='home'){generation++;busy=false;showNotice();updateView();renderHome();}else reload();}
@@ -136,7 +175,7 @@ async function load(){
     if(token!==generation)return;
     const keys=new Set(posts.map(p=>p.key));const fresh=rows.filter(p=>{if(keys.has(p.key))return false;keys.add(p.key);return true;});posts.push(...fresh);page++;done=postRows(payload).length<30;
     rememberTags(s,rows);renderPosts(fresh,true);showNotice();
-    if(fresh[0]){covers[s.id]=fresh[0].preview;persist('bp.covers',covers);if(activeCollection){const c=collections.find(c=>c.id===activeCollection);if(c&&!c.cover){c.cover=fresh[0].preview;persist('bp.collections',collections);}}}
+    if(fresh[0]){covers[s.id]=fresh[0].preview;persist('bp.covers',covers);}
     $('status').textContent=!posts.length?(done?'Ничего не найдено. Попробуйте другие теги.':'В этой части ответа нет доступных медиа. Можно загрузить следующую страницу.'):done?'Все посты загружены':'';
   }catch(e){if(token!==generation)return;$('status').textContent='Не удалось загрузить ленту.';showNotice((e.message==='Failed to fetch'?'Источник недоступен. Проверьте API и подключение к сети.':e.message)+' Можно повторить запрос или изменить источник.');}
   finally{if(token===generation){busy=false;$('more').hidden=done;}}
@@ -157,7 +196,7 @@ function renderPosts(items=posts,append=false){
     else {media=view==='grid'?button('','post-media',()=>openPost(posts.findIndex(x=>x.key===p.key))):el('div','post-media');if(view==='grid')media.setAttribute('aria-label','Открыть пост '+p.id);const image=el('img');image.src=view==='grid'?p.preview:(p.sample||p.file);image.alt=p.tags.slice(0,8).join(', ');image.loading='lazy';image.decoding='async';image.style.aspectRatio=p.width+'/'+p.height;let fallback=false;image.onerror=()=>{if(!fallback&&image.src!==p.preview){fallback=true;image.src=p.preview;}else image.alt='Медиа недоступно — откройте оригинал';};media.append(image);if(p.video)media.append(el('span','video-badge','▶ VIDEO'));}
     card.append(media);const footer=el('div','post-footer');const save=button(isSaved(p)?'♥':'♡',isSaved(p)?'saved':'',()=>toggleFavorite(p));save.dataset.favoriteKey=p.key;save.setAttribute('aria-label',isSaved(p)?'Убрать из сохранённых':'Сохранить пост');let open;if(view==='grid')open=button('Открыть','view-label',()=>openPost(posts.findIndex(x=>x.key===p.key)));else{open=el('a','post-original','Оригинал ↗');open.href=p.file;open.target='_blank';open.rel='noopener noreferrer';}
     footer.append(save,open,el('span','post-score','↑ '+p.score));card.append(footer);
-    const details=el('details','inline-tags');details.open=true;details.append(el('summary','','Теги · '+p.tags.length));const tags=el('div','grouped-tags');renderGroupedTags(tags,p,tag=>{selected=mergeTags(selected,[{value:tag,excluded:false}]);tab='feed';reload();window.scrollTo?.({top:0,behavior:'smooth'});});details.append(tags);card.append(details);fragment.append(card);
+    const details=el('details','inline-tags');details.append(el('summary','','Теги · '+p.tags.length));const tags=el('div','grouped-tags');renderGroupedTags(tags,p,tag=>{selected=mergeTags(selected,[{value:tag,excluded:false}]);tab='feed';reload();window.scrollTo?.({top:0,behavior:'smooth'});});details.append(tags);card.append(details);fragment.append(card);
   }
   $('grid').append(fragment);
 }
@@ -194,18 +233,18 @@ $('sourceForm').onsubmit=e=>{
   if(!editingSource&&sources.length>=30){$('sourceError').textContent='Можно сохранить до 30 источников.';$('sourceError').hidden=false;return;}
   const user=$('sourceUser').value.trim();if(kind==='gelbooru'&&user&&!/^\d+$/.test(user)){$('sourceError').textContent='User ID — только число из настроек API аккаунта.';$('sourceError').hidden=false;return;}
   const s={id:editingSource||uid('source'),name,base,kind,userId:kind==='gelbooru'?user:'',login:kind!=='gelbooru'?user:'',apiKey:$('sourceKey').value.trim()};
-  sources=editingSource?sources.map(x=>x.id===editingSource?s:x):[...sources,s];activeId=s.id;persistSources();closeDialog('sourceEditor');suggestionCache.clear();renderHome();if(tab==='feed')reload();else updateView();
+  sources=editingSource?sources.map(x=>x.id===editingSource?s:x):[...sources,s];activeId=s.id;invalidateCollectionCovers(true);persistSources();closeDialog('sourceEditor');suggestionCache.clear();renderHome();if(tab==='feed')reload();else updateView();
 };
-$('deleteSource').onclick=()=>{if(sources.length===1)return;sources=sources.filter(s=>s.id!==editingSource);if(activeId===editingSource)activeId=sources[0].id;persistSources();closeDialog('sourceEditor');renderHome();if(tab==='feed')reload();};
+$('deleteSource').onclick=()=>{if(sources.length===1)return;invalidateCollectionCovers();sources=sources.filter(s=>s.id!==editingSource);if(activeId===editingSource)activeId=sources[0].id;persistSources();closeDialog('sourceEditor');renderHome();if(tab==='feed')reload();};
 function openCollection(id=null){
   editingCollection=id;const c=collections.find(c=>c.id===id);$('collectionEditorTitle').textContent=c?'Изменить коллекцию':'Сохранить коллекцию';$('collectionName').value=c?.name||'';$('collectionQuery').value=c?.query||tagsQuery(mergeTags(selected,parseTags($('query').value)));$('collectionSort').value=c?.sort||sort;
   $('collectionSource').replaceChildren();const all=el('option','','Любой выбранный booru');all.value='*';$('collectionSource').append(all);for(const s of sources){const n=el('option','',s.name);n.value=s.id;$('collectionSource').append(n);}$('collectionSource').value=c?.sourceId||activeId;$('deleteCollection').hidden=!c;
   if($('collectionsDialog').open)closeDialog('collectionsDialog');$('collectionEditor').showModal();
 }
-$('collectionForm').onsubmit=e=>{e.preventDefault();const c={id:editingCollection||uid('collection'),name:$('collectionName').value.trim(),query:tagsQuery(parseTags($('collectionQuery').value)),sourceId:$('collectionSource').value,sort:$('collectionSort').value,cover:collections.find(c=>c.id===editingCollection)?.cover||posts[0]?.preview||''};if(!c.name)return;collections=editingCollection?collections.map(x=>x.id===editingCollection?c:x):[c,...collections];persist('bp.collections',collections);closeDialog('collectionEditor');renderCollections();};
+$('collectionForm').onsubmit=e=>{e.preventDefault();const c={id:editingCollection||uid('collection'),name:$('collectionName').value.trim(),query:tagsQuery(parseTags($('collectionQuery').value)),sourceId:$('collectionSource').value,sort:$('collectionSort').value,cover:''};if(!c.name)return;collections=editingCollection?collections.map(x=>x.id===editingCollection?c:x):[c,...collections];persist('bp.collections',collections);closeDialog('collectionEditor');renderCollections();};
 $('deleteCollection').onclick=()=>{collections=collections.filter(c=>c.id!==editingCollection);persist('bp.collections',collections);closeDialog('collectionEditor');renderCollections();};
 function applyCollection(c){
-  if(c.sourceId!=='*'){if(!sources.some(s=>s.id===c.sourceId)){showNotice('Источник этой коллекции удалён. Измените источник в настройках коллекции.');return;}activeId=c.sourceId;persistSources();renderSourceSelect();}
+  if(c.sourceId!=='*'){if(!sources.some(s=>s.id===c.sourceId)){showNotice('Источник этой коллекции удалён. Измените источник в настройках коллекции.');return;}if(activeId!==c.sourceId)invalidateCollectionCovers();activeId=c.sourceId;persistSources();renderSourceSelect();}
   selected=parseTags(c.query);sort=c.sort;persist('bp.sort',sort);$('query').value='';activeCollection=c.id;tab='feed';reload();window.scrollTo?.({top:0,behavior:'smooth'});
 }
 function renderManage(){ $('manageSources').replaceChildren();for(const s of sources){const n=button('','manage-row',()=>openSource(s.id));const text=el('span');text.append(el('strong','',s.name),el('small','',new URL(s.base).hostname));n.append(mark(s),text,el('span','edit-mark','✎'));$('manageSources').append(n);} }
