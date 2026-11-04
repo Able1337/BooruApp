@@ -26,7 +26,7 @@ export async function setup({storage={},server=false,fetcher=async()=>({ok:true,
  const listeners={};globalThis.window={addEventListener:(type,cb)=>{listeners[type]=cb;},scrollTo(){}};
  globalThis.IntersectionObserver=class{observe(){}};
  const requests=[];globalThis.fetch=async(url,options)=>{requests.push({url,options});return fetcher(url,options);};
- const timer=globalThis.setTimeout;globalThis.setTimeout=(...args)=>{const t=timer(...args);t.unref();return t;};
+ const timer=globalThis.setTimeout;globalThis.setTimeout=(...args)=>{const t=timer(...args);if(Number(args[1])>=30000)t.unref();return t;};
  const files=[],create=URL.createObjectURL,revoke=URL.revokeObjectURL;
  URL.createObjectURL=blob=>{files.push(blob);return'blob:test';};URL.revokeObjectURL=()=>{};
  await import('../web/app.mjs?test='+Math.random());
