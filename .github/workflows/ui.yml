@@ -1,0 +1,31 @@
+name: Check browser UI
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['web/**', 'server/**', 'scripts/ui-smoke.mjs']
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+      - name: Install isolated browser test dependencies
+        run: |
+          npm install --prefix "$RUNNER_TEMP/booru-ui" playwright@1.56.1
+          "$RUNNER_TEMP/booru-ui/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Exercise desktop and mobile UI
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/booru-ui/node_modules/playwright/index.mjs
+        run: node scripts/ui-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: BooruPocket-UI
+          path: build/ui/
+          retention-days: 14

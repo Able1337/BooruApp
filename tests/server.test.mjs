@@ -30,3 +30,16 @@ test('same-origin server API, static mode, upstream failures and credential priv
  result=new Response('<html>challenge secret-api-key</html>');
  const html=await post();assert.equal(html.status,502);assert.doesNotMatch(await html.text(),/secret-api-key/);
 });
+test('post and autocomplete allowlists cover all presets without exposing other endpoints',async()=>{
+ const {SOURCE_TEMPLATES,makeSuggestionsRequest,makeRequest}=await import('../web/core.mjs');
+ for(const s of SOURCE_TEMPLATES){const source={...s,userId:'123',login:s.kind==='gelbooru'?'':'test_user',apiKey:'test-key'};assert.ok(checkedTarget(makeRequest(source,'landscape',0)));const suggestions=makeSuggestionsRequest(source,'land');assert.ok(checkedTarget(suggestions,'tags'));assert.throws(()=>checkedTarget(suggestions,'posts'));assert.throws(()=>checkedTarget(suggestions.replace('https:','http:'),'tags'));}
+ assert.throws(()=>checkedTarget('https://api.rule34.xxx/autocomplete.php?q=land&url=https://evil.example','tags'));
+ assert.throws(()=>checkedTarget('https://e621.net/tags/autocomplete.json?search[name_matches]=x&limit=10000','tags'));
+});
+test('tag route and e621 authentication use bounded server requests without putting login in upstream URL',async t=>{
+ let called;
+ const server=http.createServer(createApp({publicOrigin:'https://frank.eben-grad.ru',upstream:async(url,options)=>{called={url,options};return new Response('[]');}}));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>server.close());
+ const base=`http://127.0.0.1:${server.address().port}`;
+ const response=await fetch(base+'/api/tags',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://frank.eben-grad.ru'},body:JSON.stringify({url:'https://e621.net/tags/autocomplete.json?search[name_matches]=sky&limit=10&login=me&api_key=private-test'})});
+ assert.equal(response.status,200);assert.ok(!called.url.includes('private-test'));assert.ok(!called.url.includes('login='));assert.equal(called.options.headers.Authorization,'Basic '+Buffer.from('me:private-test').toString('base64'));
+});

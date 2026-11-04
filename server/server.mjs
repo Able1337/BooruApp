@@ -7,24 +7,46 @@ import {isIP} from 'node:net';
 
 const ROOT = fileURLToPath(new URL('../web/',import.meta.url));
 const MAX_BODY = 16384, MAX_RESPONSE = 4 * 1024 * 1024;
-const HOSTS = new Map([
-  ['safebooru.org','/index.php'],
-  ['api.rule34.xxx','/index.php'],
-  ['danbooru.donmai.us','/posts.json'],
-]);
-export function checkedTarget(value) {
+const HOSTS = new Set(['safebooru.org','api.rule34.xxx','gelbooru.com','danbooru.donmai.us','e621.net']);
+export function checkedTarget(value,operation='posts') {
   if(typeof value!=='string'||value.length>8192)throw new Error('invalid');
   const u=new URL(value);
-  if(u.protocol!=='https:'||u.username||u.password||u.port||u.hash||HOSTS.get(u.hostname)!==u.pathname)throw new Error('invalid');
-  const allowed=new Set(['limit','tags','page','pid','s','q','json','user_id','api_key']);
-  for(const key of u.searchParams.keys())if(!allowed.has(key)||u.searchParams.getAll(key).length!==1)throw new Error('invalid');
+  if(u.protocol!=='https:'||u.username||u.password||u.port||u.hash||!HOSTS.has(u.hostname))throw new Error('invalid');
   const p=u.searchParams;
-  if(!/^\d+$/.test(p.get('limit')||'')||Number(p.get('limit'))<1||Number(p.get('limit'))>100||(p.get('tags')||'').length>2000)throw new Error('invalid');
-  if(u.pathname==='/index.php'){
-    for(const [k,v]of Object.entries({page:'dapi',s:'post',q:'index',json:'1'}))if(p.get(k)!==v)throw new Error('invalid');
-    if(!/^\d{1,6}$/.test(p.get('pid')||''))throw new Error('invalid');
-  }else if(!/^\d{1,6}$/.test(p.get('page')||''))throw new Error('invalid');
+  let allowed=['api_key','user_id','login'];
+  if(operation==='posts'){
+    if(['danbooru.donmai.us','e621.net'].includes(u.hostname)){
+      if(u.pathname!=='/posts.json'||!/^\d{1,6}$/.test(p.get('page')||''))throw new Error('invalid');
+      allowed.push('page','limit','tags');
+    }else{
+      if(u.pathname!=='/index.php')throw new Error('invalid');
+      for(const[k,v]of Object.entries({page:'dapi',s:'post',q:'index',json:'1'}))if(p.get(k)!==v)throw new Error('invalid');
+      if(!/^\d{1,6}$/.test(p.get('pid')||''))throw new Error('invalid');
+      allowed.push('page','s','q','json','pid','limit','tags');
+      if(u.hostname==='api.rule34.xxx'){allowed.push('fields');if(p.has('fields')&&p.get('fields')!=='tag_info')throw new Error('invalid');}
+    }
+    if(!/^\d+$/.test(p.get('limit')||'')||+p.get('limit')<1||+p.get('limit')>100||(p.get('tags')||'').length>2000)throw new Error('invalid');
+  }else if(operation==='tags'){
+    let prefix;
+    if(u.hostname==='api.rule34.xxx'){
+      if(u.pathname!=='/autocomplete.php')throw new Error('invalid');
+      allowed.push('q');prefix=p.get('q');
+    }else if(u.hostname==='danbooru.donmai.us'||u.hostname==='e621.net'){
+      if(u.pathname!==(u.hostname==='e621.net'?'/tags/autocomplete.json':'/tags.json'))throw new Error('invalid');
+      allowed.push('search[name_matches]','limit');prefix=p.get('search[name_matches]');
+      if(u.hostname==='danbooru.donmai.us'){allowed.push('search[order]');if(p.get('search[order]')!=='count')throw new Error('invalid');}
+    }else{
+      if(u.pathname!=='/index.php')throw new Error('invalid');
+      for(const[k,v]of Object.entries({page:'dapi',s:'tag',q:'index',json:'1',orderby:'count'}))if(p.get(k)!==v)throw new Error('invalid');
+      allowed.push('page','s','q','json','name_pattern','orderby','limit');prefix=p.get('name_pattern');
+    }
+    if(!prefix||prefix.length>100||/\s/.test(prefix))throw new Error('invalid');
+    if(p.has('limit')&&(!/^\d+$/.test(p.get('limit'))||+p.get('limit')<1||+p.get('limit')>20))throw new Error('invalid');
+  }else throw new Error('invalid');
+  const keys=new Set(allowed);
+  for(const key of p.keys())if(!keys.has(key)||p.getAll(key).length!==1)throw new Error('invalid');
   if(p.has('user_id')&&!/^\d{1,20}$/.test(p.get('user_id')))throw new Error('invalid');
+  if(p.has('login')&&(p.get('login').length>100||/[\r\n:]/.test(p.get('login'))))throw new Error('invalid');
   if(p.has('api_key')&&(p.get('api_key').length>512||/\s/.test(p.get('api_key'))))throw new Error('invalid');
   return u.href;
 }
@@ -40,7 +62,7 @@ export function createApp({upstream=fetch,publicOrigin=process.env.PUBLIC_ORIGIN
   return async(req,res)=>{
     try{
       if(req.url==='/healthz'&&req.method==='GET')return send(res,200,{ok:true});
-      if(req.url==='/api/posts'){
+      if(req.url==='/api/posts'||req.url==='/api/tags'){
         if(req.method!=='POST')return send(res,405,{error:'Разрешён только POST'});
         const origins=allowedOrigins.size?allowedOrigins:new Set([`http://${req.headers.host}`]);
         if((req.headers.origin&&!origins.has(req.headers.origin))||req.headers['sec-fetch-site']==='cross-site')return send(res,403,{error:'Запрос с другого сайта запрещён'});
@@ -54,12 +76,18 @@ export function createApp({upstream=fetch,publicOrigin=process.env.PUBLIC_ORIGIN
         if(rate.count>=60||active>=8||rates.size>=10000&&!rates.has(client))return send(res,429,{error:'Превышен лимит запросов. Подожди минуту.'});
         rate.count++;rates.set(client,rate);
         let target;
-        try{const body=await readBody(req);target=checkedTarget(body.url);}catch{return send(res,400,{error:'Недопустимый запрос API. Поддерживаются Safebooru, Rule34 и Danbooru.'});}
+        try{const body=await readBody(req);target=checkedTarget(body.url,req.url==='/api/tags'?'tags':'posts');}catch{return send(res,400,{error:'Недопустимый запрос API. Поддерживаются Safebooru, Rule34, Gelbooru, Danbooru и e621.'});}
         // Recheck after reading the body: multiple slow clients must not bypass the bound.
         if(active>=8)return send(res,503,{error:'Сервер занят. Повтори позже.'});
         active++;
         try{
-          const response=await upstream(target,{redirect:'error',signal:AbortSignal.timeout(25000),headers:{Accept:'application/json','User-Agent':'BooruPocket/0.2 (personal API client)'}});
+          const targetUrl=new URL(target);
+          const headers={Accept:'application/json','User-Agent':'BooruPocket/0.3 (https://github.com/Able1337/BooruApp)'};
+          if(['e621.net','danbooru.donmai.us'].includes(targetUrl.hostname)&&targetUrl.searchParams.get('login')&&targetUrl.searchParams.get('api_key')){
+            headers.Authorization='Basic '+Buffer.from(targetUrl.searchParams.get('login')+':'+targetUrl.searchParams.get('api_key')).toString('base64');
+            targetUrl.searchParams.delete('login');targetUrl.searchParams.delete('api_key');
+          }
+          const response=await upstream(targetUrl.href,{redirect:'error',signal:AbortSignal.timeout(25000),headers});
           if(!response.ok){
             await response.body?.cancel();
             const errors={401:'API отклонил авторизацию. Проверь User ID и API key.',403:'Источник запретил запрос. Проверь ключ и доступ API.',429:'Превышен лимит источника. Подожди минуту.'};

@@ -52,3 +52,36 @@ test('Rule34 requires separate credentials and rejects pasted URL parameters',()
  assert.throws(()=>makeRequest(source,'',0),/User ID/);
  assert.throws(()=>makeRequest({...source,userId:'12',apiKey:'&api_key=SECRET&user_id=12'},'',0),/только значения/);
 });
+test('e621 nested media, tag categories and score normalize without losing source data',()=>{
+ const s={name:'e621',base:'https://e621.net/',kind:'e621',id:'e6'};
+ const [p]=normalizePosts({posts:[{id:7,file:{url:'https://static.example/a.webm',ext:'webm',width:900,height:600},preview:{url:'https://static.example/p.jpg'},sample:{url:'https://static.example/s.jpg'},score:{total:42},tags:{artist:['artist_name'],character:['character_name'],species:['cat'],general:['sky']}}]},s);
+ assert.equal(p.video,true);assert.equal(p.width,900);assert.equal(p.score,42);assert.equal(p.sourceId,'e6');assert.deepEqual(p.tagGroups.species,['cat']);assert.deepEqual(p.tagGroups.artist,['artist_name']);assert.ok(p.tags.includes('sky'));
+});
+test('Danbooru categories and DAPI tag_info preserve groups with a general fallback',()=>{
+ const row={id:1,file_url:'https://example.org/a.jpg',tag_string:'artist_a char_a world_a sky',tag_string_artist:'artist_a',tag_string_character:'char_a',tag_string_copyright:'world_a'};
+ const [p]=normalizePosts([row],{...gel,kind:'danbooru'});assert.deepEqual(p.tagGroups.artist,['artist_a']);assert.deepEqual(p.tagGroups.general,['sky']);
+ const [dapi]=normalizePosts([{...row,tag_string_artist:'',tag_string_character:'',tag_string_copyright:'',tag_info:{artist_a:{type:1},char_a:4,world_a:[3,123]}}],gel);
+ assert.deepEqual(dapi.tagGroups.artist,['artist_a']);assert.deepEqual(dapi.tagGroups.character,['char_a']);assert.deepEqual(dapi.tagGroups.copyright,['world_a']);assert.deepEqual(dapi.tagGroups.general,['sky']);
+});
+test('source migration, collections and tag changes retain data and exclude tags predictably',async()=>{
+ const {sanitizeSources,sanitizeCollections,parseTags,tagsQuery,mergeTags,searchTags}=await import('../web/core.mjs');
+ const old={...gel,apiKey:'keep-me'};const rows=sanitizeSources(null,old);assert.equal(rows[0].apiKey,'keep-me');
+ assert.equal(sanitizeSources([{id:'unsafe',name:'Bad',base:'javascript:alert(1)',kind:'gelbooru'}])[0].name,'Safebooru');
+ const tags=mergeTags(parseTags('sky city'),parseTags('-city'));assert.equal(tagsQuery(tags),'sky -city');assert.equal(searchTags({...gel,kind:'e621'},tags,'score'),'sky -city order:score');
+ const c=sanitizeCollections([{id:'x',name:'View',query:'sky -city',cover:'javascript:alert(1)'}])[0];assert.equal(c.cover,'');assert.equal(c.query,'sky -city');
+});
+test('suggestion adapters encode prefixes, keep credentials and accept provider response shapes',async()=>{
+ const {makeSuggestionsRequest,normalizeSuggestions}=await import('../web/core.mjs');
+ const rule={...gel,base:'https://rule34.xxx/',userId:'12',apiKey:'test'};
+ const u=new URL(makeSuggestionsRequest(rule,'long_h'));assert.equal(u.pathname,'/autocomplete.php');assert.equal(u.searchParams.get('q'),'long_h');assert.equal(u.searchParams.get('api_key'),'test');
+ const dan=new URL(makeSuggestionsRequest({...gel,kind:'danbooru'},'blue'));assert.equal(dan.searchParams.get('search[name_matches]'),'blue*');
+ assert.deepEqual(normalizeSuggestions([{value:'long_hair',count:30},{name:'sky',post_count:20}]),[{name:'long_hair',count:30},{name:'sky',count:20}]);
+});
+test('explicit sort/order tags override default sorting and score filters are preserved',async()=>{
+ const {searchTags,parseTags,metaSuggestions}=await import('../web/core.mjs');
+ assert.equal(searchTags(gel,parseTags('city score:>100 sort:score:desc'),'new'),'city score:>100 sort:score:desc');
+ assert.equal(searchTags({...gel,kind:'e621'},parseTags('sky sort:score:desc'),'new'),'sky order:score');
+ assert.equal(searchTags(gel,parseTags('sky order:score_asc'),'random'),'sky sort:score:asc');
+ assert.equal(searchTags({...gel,kind:'danbooru'},parseTags('score:>=50'),'old'),'score:>=50 order:id_asc');
+ assert.ok(metaSuggestions(gel,'score').some(x=>x.name==='score:>100'));assert.ok(metaSuggestions(gel,'sort').some(x=>x.name==='sort:score:desc'));
+});
