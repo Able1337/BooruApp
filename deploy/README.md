@@ -28,3 +28,9 @@ curl --fail https://frank.eben-grad.ru/healthz
 ```
 
 The deployment workflow additionally verifies the server-specific page marker and a real Safebooru API response. Rule34 needs the user's own API credentials; it cannot be verified using the deployment secret. Runtime API credentials are unrelated to SSH credentials.
+
+## IP HTTPS
+
+The exact additional origin `https://109.120.140.198` is configured through `ADDITIONAL_ORIGINS`. Arbitrary other origins remain rejected. `scripts/enable-ip-https.sh` provisions an IP-address certificate with a separate Certbot 5.9 virtual environment and separate configuration directory `/etc/letsencrypt-booru-ip`. The nginx IP vhost is the default TLS server because clients connecting to IP literals do not send a DNS SNI name. Domain SNI still uses the domain certificate.
+
+The short-lived IP certificate is automatically checked for renewal every four hours by `booru-ip-certificate-renew.timer`; the deploy hook reloads nginx. The distro Certbot and its existing domain certificate renewal are preserved. No private key or certificate account data is committed.
