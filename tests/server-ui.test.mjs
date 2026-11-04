@@ -19,3 +19,9 @@ test('optional media relay routes Gelbooru feed and viewer while stored favorite
  assert.equal($('grid').querySelector('img').src,'/media?url='+encodeURIComponent(media));
  $('grid').querySelector('.post-footer').children[0].click();assert.equal(JSON.parse(app.memory.get('bp.saved'))[0].file,media);
 });
+
+test('existing disabled defaults migrate once and an intentional later opt-out persists',async t=>{
+ const initial={'bp.mediaRelay':{gelbooru:false,e621:false}};
+ const first=await setup({server:true,storage:initial});assert.deepEqual(JSON.parse(first.memory.get('bp.mediaRelay')),{gelbooru:true,e621:true});assert.equal(JSON.parse(first.memory.get('bp.mediaRelayVersion')),1);first.cleanup();
+ const second=await setup({server:true,storage:{...initial,'bp.mediaRelayVersion':1}});t.after(second.cleanup);assert.deepEqual(JSON.parse(second.memory.get('bp.mediaRelay')),{gelbooru:false,e621:false});
+});

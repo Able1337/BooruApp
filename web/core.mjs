@@ -219,3 +219,20 @@ export function mediaTarget(value){
   }catch{return null;}
 }
 export function mediaUrl(value,enabled={}){const target=mediaTarget(value);return target&&enabled[target.provider]===true?'/media?url='+encodeURIComponent(target.url):value;}
+
+export function encodeRoute({page='home',booru='',tags='',sort='new',view='list',collection=''}={}){
+  if(page==='home')return '#home';
+  const params=new URLSearchParams();
+  if(booru)params.set('booru',booru.slice(0,100));
+  if(tags)params.set('tags',tagsQuery(parseTags(tags)));
+  if(['score','score_asc','random','old'].includes(sort))params.set('sort',sort);
+  if(view==='grid')params.set('view','grid');
+  if(collection)params.set('collection',collection.slice(0,100));
+  return '#'+(page==='saved'?'saved':'feed')+(params.size?'?'+params:'');
+}
+export function decodeRoute(hash=''){
+  const [page,query='']=hash.replace(/^#/,'').split('?');
+  if(!['feed','saved'].includes(page))return {page:'home'};
+  const p=new URLSearchParams(query.slice(0,16384));
+  return {page,booru:(p.get('booru')||'').slice(0,100),tags:tagsQuery(parseTags(p.get('tags')||'')),sort:['score','score_asc','random','old'].includes(p.get('sort'))?p.get('sort'):'new',view:p.get('view')==='grid'?'grid':'list',collection:(p.get('collection')||'').slice(0,100)};
+}

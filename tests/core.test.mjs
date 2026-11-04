@@ -111,3 +111,11 @@ test('collections are grouped by their own booru with common and missing sources
  const groups=groupCollectionsBySource(rows,sources);
  assert.deepEqual(groups.map(g=>g.id),['safe','rule','*',null]);assert.deepEqual(groups.map(g=>g.items[0].id),['c','a','b','d']);
 });
+test('route links preserve the public search state and omit credentials and unknown fields',async()=>{
+ const {encodeRoute,decodeRoute}=await import('../web/core.mjs');
+ const route=encodeRoute({page:'feed',booru:'gelbooru',tags:'sky -night Score:>50',sort:'score',view:'grid',collection:'my-collection',apiKey:'private-secret',login:'private-user'});
+ assert.doesNotMatch(route,/private|apiKey|login/);
+ assert.deepEqual(decodeRoute(route),{page:'feed',booru:'gelbooru',tags:'sky -night score:>50',sort:'score',view:'grid',collection:'my-collection'});
+ assert.deepEqual(decodeRoute('#evil?api_key=secret'),{page:'home'});assert.equal(encodeRoute({page:'home',tags:'sky'}),'#home');
+ assert.equal(decodeRoute('#feed?sort=bad&view=bad&tags=sky').sort,'new');
+});
