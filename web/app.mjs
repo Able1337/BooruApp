@@ -1,4 +1,4 @@
-import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource,mediaUrl,encodeRoute,decodeRoute,routeHistoryMode,savedPostSource,groupSavedPosts,originalPostUrl,downloadFilename,similarQueries,rankSimilarPosts} from './core.mjs';
+import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource,mediaUrl,encodeRoute,decodeRoute,routeHistoryMode,savedPostSource,groupSavedPosts,originalPostUrl,downloadFilename,similarQueries,rankSimilarPosts,addCollectionPresets} from './core.mjs';
 const $=id=>document.getElementById(id);
 const el=(tag,cls='',text='')=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text)n.textContent=text;return n;};
 const button=(text,cls,action)=>{const n=el('button',cls,text);n.type='button';n.onclick=action;return n;};
@@ -9,8 +9,8 @@ function showNotice(text=''){ $('notice').textContent=text;$('notice').hidden=!t
 let sources=sanitizeSources(read('bp.sources',null),read('bp.source',null));
 let activeId=read('bp.activeId','');if(!sources.some(s=>s.id===activeId))activeId=sources[0].id;
 let saved;try{saved=sanitizeFavorites(read('bp.saved',[]));}catch{saved=[];}
-const seeds=[{id:'landscape',name:'Пейзажи',query:'landscape',sourceId:'*',sort:'new'},{id:'city',name:'Город',query:'city',sourceId:'*',sort:'new'},{id:'sky',name:'Небо',query:'sky',sourceId:'*',sort:'new'},{id:'top',name:'По оценке',query:'',sourceId:'*',sort:'score'}];
-let collections=sanitizeCollections(read('bp.collections',seeds));
+let collections=sanitizeCollections(read('bp.collections',[]));
+let appliedCollectionPresets=read('bp.collectionPresets',[]);
 let covers=read('bp.covers',{});if(!covers||typeof covers!=='object'||Array.isArray(covers))covers={};
 let selected=[],tab='home',sort=read('bp.sort','new'),view=read('bp.view','list');
 if(!['new','score','score_asc','random','old'].includes(sort))sort='new';if(!['list','grid'].includes(view))view='list';
@@ -27,7 +27,10 @@ mediaRelay={gelbooru:true,e621:true,...mediaRelay};
 if(serverApi&&read('bp.mediaRelayVersion',0)<1){mediaRelay.gelbooru=true;mediaRelay.e621=true;persist('bp.mediaRelay',mediaRelay);persist('bp.mediaRelayVersion',1);}
 const displayMedia=url=>serverApi?mediaUrl(url,mediaRelay):url;
 const source=()=>sources.find(s=>s.id===activeId)||sources[0];
-function persistSources(){persist('bp.sources',sources);persist('bp.activeId',activeId);persist('bp.source',source());}
+function persistSources(){ensureCollectionPresets();persist('bp.sources',sources);persist('bp.activeId',activeId);persist('bp.source',source());}
+function ensureCollectionPresets(){
+  const next=addCollectionPresets(collections,sources,appliedCollectionPresets);collections=next.collections;appliedCollectionPresets=next.applied;persist('bp.collections',collections);persist('bp.collectionPresets',appliedCollectionPresets);
+}
 function mark(s){const t=sourceTemplate(s);const n=el('span','source-mark',t.mark);n.dataset.color=t.color;return n;}
 function coverImage(url){const u=httpsUrl(url);if(!u)return null;const image=el('img','card-cover');image.src=displayMedia(u);image.alt='';image.loading='lazy';image.onerror=()=>image.remove();return image;}
 function closeDialog(id){$(id).close();}

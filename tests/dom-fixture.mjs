@@ -30,5 +30,5 @@ export async function setup({storage={},server=false,fetcher=async()=>({ok:true,
  const files=[],create=URL.createObjectURL,revoke=URL.revokeObjectURL;
  URL.createObjectURL=blob=>{files.push(blob);return'blob:test';};URL.revokeObjectURL=()=>{};
  await import('../web/app.mjs?test='+Math.random());
- return{$,memory,requests,files,listeners,intersectCollections(){for(const observer of observers){const targets=observer.targets.filter(n=>n.dataset.collectionId);if(targets.length)observer.callback(targets.map(target=>({target,isIntersecting:true})));}},cleanup(){globalThis.setTimeout=timer;URL.createObjectURL=create;URL.revokeObjectURL=revoke;},tick:()=>new Promise(r=>setImmediate(r))};
+ return{$,memory,requests,files,listeners,intersectCollections(ids=null){for(const observer of observers){const targets=observer.targets.filter(n=>n.dataset.collectionId&&(!ids||ids.includes(n.dataset.collectionId)));if(targets.length)observer.callback(targets.map(target=>({target,isIntersecting:true})));}},cleanup(){globalThis.setTimeout=timer;URL.createObjectURL=create;URL.revokeObjectURL=revoke;},tick:()=>new Promise(r=>setImmediate(r))};
 }

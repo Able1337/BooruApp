@@ -45,26 +45,26 @@ test('collection covers load the first result for each exact query and source wi
  const app=await setup({server:true,storage:{'bp.sources':[{id:'safe',name:'Safe',base:'https://safebooru.org/',kind:'gelbooru'},{id:'dan',name:'Dan',base:'https://danbooru.donmai.us/',kind:'danbooru'}],'bp.activeId':'safe','bp.collections':[{id:'a',name:'Landscape',query:'landscape',sourceId:'*',sort:'new'},{id:'b',name:'City',query:'city',sourceId:'*',sort:'score'},{id:'c',name:'Same query',query:'landscape',sourceId:'*',sort:'new'},{id:'d',name:'Night',query:'night',sourceId:'dan',sort:'new'}]},fetcher:async(url,options)=>{
    const target=new URL(JSON.parse(options.body).url);assert.equal(target.searchParams.get('limit'),'1');active++;maxActive=Math.max(maxActive,active);await delay(5);active--;
    const tag=target.searchParams.get('tags').split(' ')[0];return{ok:true,json:async()=>[{id:1,file_url:'https://example.org/'+tag+'.jpg',preview_url:'https://example.org/'+tag+'-preview.jpg',tags:tag}]};
- }});t.after(app.cleanup);app.intersectCollections();await delay(60);
+ }});t.after(app.cleanup);app.intersectCollections(['a','b','c','d']);await delay(60);
  assert.equal(app.requests.length,3);assert.equal(maxActive,2);
  const cards=app.$('collectionCards').querySelectorAll('.collection-card');
  assert.equal(cards.find(n=>n.dataset.collectionId==='a').querySelector('.card-cover').src,'https://example.org/landscape-preview.jpg');assert.equal(cards.find(n=>n.dataset.collectionId==='b').querySelector('.card-cover').src,'https://example.org/city-preview.jpg');assert.equal(cards.find(n=>n.dataset.collectionId==='c').querySelector('.card-cover').src,'https://example.org/landscape-preview.jpg');
  const night=new URL(JSON.parse(app.requests.find(r=>JSON.parse(r.options.body).url.includes('night')).options.body).url);assert.equal(night.hostname,'danbooru.donmai.us');
- cards.find(n=>n.dataset.collectionId==='a').querySelector('.card-edit').click();app.$('collectionQuery').value='forest';app.$('collectionForm').onsubmit({preventDefault(){}});app.intersectCollections();await delay(40);
+ cards.find(n=>n.dataset.collectionId==='a').querySelector('.card-edit').click();app.$('collectionQuery').value='forest';app.$('collectionForm').onsubmit({preventDefault(){}});app.intersectCollections(['a','b','c','d']);await delay(40);
  assert.equal(app.requests.length,4);assert.equal(app.$('collectionCards').querySelectorAll('.collection-card').find(n=>n.dataset.collectionId==='a').querySelector('.card-cover').src,'https://example.org/forest-preview.jpg');
 });
 test('a late cover response cannot replace the cover after changing the active booru',async t=>{
  const {setTimeout:delay}=await import('node:timers/promises');
  const app=await setup({server:true,storage:{'bp.sources':[{id:'safe',name:'Safe',base:'https://safebooru.org/',kind:'gelbooru'},{id:'dan',name:'Dan',base:'https://danbooru.donmai.us/',kind:'danbooru'}],'bp.activeId':'safe','bp.collections':[{id:'a',name:'Sky',query:'sky',sourceId:'*',sort:'new'}]},fetcher:async(url,options)=>{
   const old=JSON.parse(options.body).url.includes('safebooru.org');await delay(old?40:1);const file='https://example.org/'+(old?'old':'new')+'.jpg';return{ok:true,json:async()=>[{id:1,file_url:file,preview_url:file,tags:'sky'}]};
- }});t.after(app.cleanup);app.intersectCollections();app.$('sourceSelect').value='dan';app.$('sourceSelect').onchange();app.intersectCollections();await delay(80);
- assert.equal(app.$('collectionCards').querySelectorAll('.collection-card')[0].querySelector('.card-cover').src,'https://example.org/new.jpg');
+ }});t.after(app.cleanup);app.intersectCollections(['a','b','c','d']);app.$('sourceSelect').value='dan';app.$('sourceSelect').onchange();app.intersectCollections(['a','b','c','d']);await delay(80);
+ assert.equal(app.$('collectionCards').querySelectorAll('.collection-card').find(n=>n.dataset.collectionId==='a').querySelector('.card-cover').src,'https://example.org/new.jpg');
 });
 test('each booru section creates new collections preselected for that booru',async t=>{
  const app=await setup({storage:{'bp.sources':[{id:'safe',name:'Safe',base:'https://safebooru.org/',kind:'gelbooru'},{id:'rule',name:'Rule34',base:'https://api.rule34.xxx/',kind:'gelbooru'}],'bp.collections':[{id:'a',name:'Source query',query:'sky',sourceId:'rule',sort:'new'},{id:'b',name:'Common',query:'city',sourceId:'*',sort:'new'}]}});t.after(app.cleanup);
- const groups=app.$('collectionCards').querySelectorAll('.collection-group');assert.equal(groups.length,2);assert.equal(groups[0].dataset.sourceId,'rule');
- groups[0].querySelector('.soft-button').click();assert.equal(app.$('collectionSource').value,'rule');app.$('collectionClose').click();
- groups[1].querySelector('.soft-button').click();assert.equal(app.$('collectionSource').value,'*');
+ const groups=app.$('collectionCards').querySelectorAll('.collection-group');assert.equal(groups.length,3);const rule=groups.find(g=>g.dataset.sourceId==='rule'),common=groups.find(g=>g.dataset.sourceId==='*');
+ rule.querySelector('.soft-button').click();assert.equal(app.$('collectionSource').value,'rule');app.$('collectionClose').click();
+ common.querySelector('.soft-button').click();assert.equal(app.$('collectionSource').value,'*');
 });
 test('post tag clicks immediately include the tag and chips can then exclude it',async t=>{
  const app=await setup({server:true,fetcher:async()=>({ok:true,json:async()=>[{id:1,file_url:'https://example.org/sky.jpg',preview_url:'https://example.org/p.jpg',tags:'sky'}]})});t.after(app.cleanup);const{$,requests}=app;
@@ -91,4 +91,12 @@ test('related posts use the original provider and viewer favorites use the recom
  const related=app.requests.slice(1);assert.ok(related.length<=3);assert.ok(related.every(r=>new URL(JSON.parse(r.options.body).url).hostname==='safebooru.org'));
  $('similarGrid').children[0].click();assert.equal($('viewer').open,true);assert.match($('viewerSource').textContent,/#2/);assert.equal($('downloadPost').download,'safebooru-2.png');
  $('savePost').click();assert.equal(JSON.parse(app.memory.get('bp.saved'))[0].id,'2');
+});
+test('adding a booru adds its starter collections once and deleted presets stay deleted',async t=>{
+ const app=await setup();t.after(app.cleanup);const{$,memory}=app;
+ assert.equal(JSON.parse(memory.get('bp.collections')).length,3);
+ $('addSource').click();$('sourceTemplates').children.find(n=>n.dataset.template==='e621').click();$('sourceForm').onsubmit({preventDefault(){}});
+ let items=JSON.parse(memory.get('bp.collections'));const furry=items.filter(c=>c.sourceId===JSON.parse(memory.get('bp.activeId')));assert.deepEqual(furry.map(c=>c.name),['Trend','Top','Animated','Gay','Femboy']);
+ const card=$('collectionCards').querySelectorAll('.collection-card').find(c=>c.dataset.collectionId===furry[3].id);card.querySelector('.card-edit').click();$('deleteCollection').click();
+ $('sourceSelect').value=JSON.parse(memory.get('bp.activeId'));$('sourceSelect').onchange();items=JSON.parse(memory.get('bp.collections'));assert.ok(!items.some(c=>c.id===furry[3].id));
 });

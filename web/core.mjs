@@ -294,3 +294,26 @@ export function rankSimilarPosts(original,candidates){
   const score=p=>(p.tags||[]).reduce((sum,t)=>sum+(weights.get(t)||0),0);
   return unique.filter(p=>score(p)>0).sort((a,b)=>score(b)-score(a)||b.score-a.score).slice(0,12);
 }
+
+export function sourceCollectionPresets(source){
+  const provider=sourceTemplate(source).id;if(!provider||!source.id)return [];
+  let hash=2166136261;for(const char of source.id)hash=Math.imul(hash^char.charCodeAt(0),16777619)>>>0;
+  const pack=[['trend','Trend','score:>50','new'],['top','Top','','score'],['animated','Animated','animated score:>50','new']];
+  if(['rule34','e621'].includes(provider))pack.push(['gay','Gay',provider==='e621'?'male/male':'yaoi','score'],['femboy','Femboy',provider==='e621'?'girly male':'femboy','score']);
+  return pack.map(([key,name,query,sort])=>({id:'preset-'+hash.toString(36)+'-'+provider+'-'+key,name,query,sort,sourceId:source.id,cover:''}));
+}
+export function addCollectionPresets(collections,sources,applied=[]){
+  const seen=new Set(Array.isArray(applied)?applied.filter(x=>typeof x==='string').slice(0,2000):[]);let rows=[...collections];
+  if(!seen.has('legacy-defaults-v1')){
+    const old={landscape:['Пейзажи','landscape','new'],city:['Город','city','new'],sky:['Небо','sky','new'],top:['По оценке','','score']};
+    rows=rows.filter(c=>{const legacy=old[c.id];return !(legacy&&c.sourceId==='*'&&c.name===legacy[0]&&c.query===legacy[1]&&c.sort===legacy[2]);});seen.add('legacy-defaults-v1');
+  }
+  for(const source of sources)for(const preset of sourceCollectionPresets(source)){
+    if(seen.has(preset.id))continue;
+    const signature=c=>searchTags(source,parseTags(c.query),c.sort).split(/\s+/).filter(Boolean).sort().join(' ');
+    const exists=rows.some(c=>c.id===preset.id||c.sourceId===source.id&&signature(c)===signature(preset));
+    if(exists){seen.add(preset.id);continue;}
+    if(rows.length<200){rows.push(preset);seen.add(preset.id);}
+  }
+  return {collections:rows,applied:[...seen]};
+}
