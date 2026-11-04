@@ -37,6 +37,7 @@ try{
  await page.locator('#grid .inline-tags summary').first().click();await page.locator('#grid .inline-tags .post-tags a').first().click();await page.waitForFunction(()=>document.querySelectorAll('#grid .post').length===3);assert.equal(await page.locator('.tag-chip.excluded').filter({hasText:chosenTag}).count(),0);
  await page.evaluate(()=>Object.defineProperty(navigator,'share',{configurable:true,value:async payload=>{window.sharedPayload=payload;}}));
  await page.locator('#grid .share-post').first().click();assert.equal(await page.evaluate(()=>window.sharedPayload.url),'https://safebooru.org/index.php?page=post&s=view&id=1');
+ await page.locator('#grid .similar-post').first().click();await page.locator('#similarGrid .similar-card').first().waitFor();assert.equal(await page.locator('#similarGrid .similar-card').count(),2);await page.locator('#similarGrid .similar-card').first().click();assert.ok((await page.locator('#viewerSource').innerText()).includes('#2'));assert.ok((await page.locator('#downloadPost').getAttribute('download')).startsWith('safebooru-2.'));await page.click('#closeViewer');
  await page.screenshot({path:'build/ui/desktop-list.png',fullPage:false});
  await page.click('#saveCollection');await page.fill('#collectionName','Мой поиск');await page.click('#collectionForm button[type=submit]');
  await page.click('#homeTab');await page.locator('.collection-card').first().waitFor();assert.match(await page.locator('.collection-card').first().innerText(),/Мой поиск/);
@@ -68,6 +69,9 @@ try{
  await page.evaluate(()=>scrollTo(0,0));await page.waitForFunction(()=>document.getElementById('searchPanel').getBoundingClientRect().top>=0);assert.equal(await page.locator('#grid video').evaluate(video=>video.paused),true);
  await page.fill('#query','media_smoke');await page.press('#query','Enter');await page.waitForFunction(()=>document.querySelectorAll('#grid img').length===2&&[...document.querySelectorAll('#grid img')].every(img=>img.complete&&img.naturalWidth>0));
  assert.ok(await page.locator('#grid img').evaluateAll(images=>images.every(img=>new URL(img.src).pathname==='/media')));
+ const [firstDownload]=await Promise.all([page.waitForEvent('download'),page.locator('#grid .download-post').nth(0).click()]);assert.ok(firstDownload.suggestedFilename().endsWith('.png'));assert.notEqual(firstDownload.suggestedFilename(),'media.png');assert.equal(await firstDownload.failure(),null);
+ const [secondDownload]=await Promise.all([page.waitForEvent('download'),page.locator('#grid .download-post').nth(1).click()]);assert.ok(secondDownload.suggestedFilename().endsWith('.png'));assert.notEqual(secondDownload.suggestedFilename(),firstDownload.suggestedFilename());assert.equal(await secondDownload.failure(),null);
+
  await page.locator('#grid video').scrollIntoViewIfNeeded();await page.locator('#grid video').evaluate(async video=>{video.muted=true;await video.play();});await page.waitForFunction(()=>!document.querySelector('#grid video').paused);
  assert.ok(relayCalls.some(call=>call.url===gelMedia&&call.referer==='https://gelbooru.com/'));assert.ok(relayCalls.some(call=>call.url===eMedia&&call.referer==='https://e621.net/'));
  await page.evaluate(()=>scrollTo(0,0));

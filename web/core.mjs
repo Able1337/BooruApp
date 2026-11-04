@@ -261,3 +261,36 @@ export function originalPostUrl(post){
   const base=source.id==='rule34'?'https://rule34.xxx/':source.base;
   return ['danbooru','e621'].includes(source.kind)?new URL('posts/'+post.id,base).href:new URL('index.php?page=post&s=view&id='+post.id,base).href;
 }
+
+export function relayFilename(url,provider,type=''){
+  const extensions={'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp','image/avif':'avif','video/webm':'webm','video/mp4':'mp4'};
+  const ext=extensions[type.split(';')[0].trim().toLowerCase()];
+  const raw=new URL(url).pathname.split('/').pop().replace(/[^a-zA-Z0-9._-]/g,'_').slice(0,160);
+  const name=ext?raw.replace(/\.[^.]+$/,'')+'.'+ext:raw;
+  return provider+'-'+name;
+}
+export function downloadFilename(post){
+  const source=savedPostSource(post),raw=String(post.ext||new URL(post.file).pathname.split('.').pop()).toLowerCase();
+  const ext=['jpg','jpeg','png','gif','webp','avif','webm','mp4'].includes(raw)?raw:'bin';
+  return source.id.replace(/[^a-zA-Z0-9_-]/g,'_')+'-'+String(post.id).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,60)+'.'+ext;
+}
+export function similarQueries(post){
+  const groups=post.tagGroups||{},queries=[],seen=new Set();
+  const add=(label,tags)=>{const safe=tags.filter(t=>typeof t==='string'&&t&&!/[\s:]/.test(t)&&!t.startsWith('-')).slice(0,2);const query=safe.join(' ');if(query&&!seen.has(query)){seen.add(query);queries.push({label,query});}};
+  add('Тот же персонаж',(groups.character||[]).slice(0,1));
+  add('Тот же автор',(groups.artist||[]).slice(0,1));
+  add('Та же вселенная',(groups.copyright||[]).slice(0,1));
+  if(queries.length<3)add('Тот же вид',(groups.species||[]).slice(0,1));
+  const common=new Set(['1girl','1boy','solo','duo','male','female','highres','absurdres','rating','signature','watermark','english_text','translation_request','commentary_request','simple_background','white_background','looking_at_viewer']);
+  const tags=(groups.general||post.tags||[]).filter(t=>!common.has(t));
+  if(queries.length<3)add('Общие теги',tags.slice(0,2));
+  if(queries.length<3&&tags.length>1)add('Ещё по тегу',tags.slice(1,2));
+  return queries.slice(0,3);
+}
+export function rankSimilarPosts(original,candidates){
+  const weights=new Map((original.tags||[]).map(tag=>[tag,1]));
+  for(const [group,weight]of [['artist',5],['character',8],['copyright',3],['species',2]])for(const tag of original.tagGroups?.[group]||[])weights.set(tag,weight);
+  const unique=[...new Map(candidates.filter(p=>p.key!==original.key&&p.id!==original.id).map(p=>[p.key,p])).values()];
+  const score=p=>(p.tags||[]).reduce((sum,t)=>sum+(weights.get(t)||0),0);
+  return unique.filter(p=>score(p)>0).sort((a,b)=>score(b)-score(a)||b.score-a.score).slice(0,12);
+}

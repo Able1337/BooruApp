@@ -1,7 +1,7 @@
 import {isIP} from 'node:net';
 import {Readable,Transform} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
-import {mediaTarget} from '../web/core.mjs';
+import {mediaTarget,relayFilename} from '../web/core.mjs';
 
 const MAX_BYTES=512*1024*1024;
 export function createMediaRelay(upstream,allowedOrigins){
@@ -33,7 +33,7 @@ export function createMediaRelay(upstream,allowedOrigins){
       if(!/^(image\/(jpeg|png|gif|webp|avif)|video\/(webm|mp4))(?:;|$)/i.test(type)){await response.body?.cancel();return fail(502,'Источник вернул неподдерживаемый формат');}
       const size=response.headers.get('content-length');
       if(size&&(!/^\d+$/.test(size)||Number(size)>MAX_BYTES)){await response.body?.cancel();return fail(502,'Файл слишком большой');}
-      const outgoing={'Content-Type':type,'Cache-Control':'private, max-age=300','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Accel-Buffering':'no'};
+      const outgoing={'Content-Type':type,'Content-Disposition':'inline; filename="'+relayFilename(target.url,target.provider,type)+'"','Cache-Control':'private, max-age=300','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Accel-Buffering':'no'};
       for(const name of ['content-length','content-range','accept-ranges'])if(response.headers.has(name))outgoing[name]=response.headers.get(name);
       res.writeHead(response.status,outgoing);
       if(req.method==='HEAD'){await response.body?.cancel();return res.end();}

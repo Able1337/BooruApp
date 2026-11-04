@@ -1,4 +1,4 @@
-import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource,mediaUrl,encodeRoute,decodeRoute,routeHistoryMode,savedPostSource,groupSavedPosts,originalPostUrl} from './core.mjs';
+import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource,mediaUrl,encodeRoute,decodeRoute,routeHistoryMode,savedPostSource,groupSavedPosts,originalPostUrl,downloadFilename,similarQueries,rankSimilarPosts} from './core.mjs';
 const $=id=>document.getElementById(id);
 const el=(tag,cls='',text='')=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text)n.textContent=text;return n;};
 const button=(text,cls,action)=>{const n=el('button',cls,text);n.type='button';n.onclick=action;return n;};
@@ -14,6 +14,7 @@ let collections=sanitizeCollections(read('bp.collections',seeds));
 let covers=read('bp.covers',{});if(!covers||typeof covers!=='object'||Array.isArray(covers))covers={};
 let selected=[],tab='home',sort=read('bp.sort','new'),view=read('bp.view','list');
 if(!['new','score','score_asc','random','old'].includes(sort))sort='new';if(!['list','grid'].includes(view))view='list';
+let viewerItems=[],similarItems=[],similarToken=0;
 let posts=[],page=0,busy=false,done=false,generation=0,current=0,editingSource=null,editingCollection=null,activeCollection=null;
 let routePage='home',routeHash='',restoringRoute=false;
 let port=null,serial=0,suggestionGeneration=0,suggestionTimer=null,suggestionActions=[],suggestionIndex=-1;
@@ -252,7 +253,7 @@ function toggleFavorite(p){
   saved=isSaved(p)?saved.filter(x=>x.key!==p.key):[p,...saved];persist('bp.saved',saved);count();
   if(tab==='saved'){reload();return;}
   for(const n of document.querySelectorAll('[data-favorite-key]'))if(n.dataset.favoriteKey===p.key){n.textContent=isSaved(p)?'♥':'♡';n.classList.toggle('saved',isSaved(p));n.setAttribute('aria-label',isSaved(p)?'Убрать из сохранённых':'Сохранить пост');}
-  if(posts[current]?.key===p.key)$('savePost').textContent=isSaved(p)?'♥ Пост сохранён':'♡ Сохранить пост';
+  if(viewerItems[current]?.key===p.key)$('savePost').textContent=isSaved(p)?'♥ Пост сохранён':'♡ Сохранить пост';
 }
 function renderPosts(items=posts,append=false){
   if(!append){clearFeedVideos();$('grid').replaceChildren();}
@@ -273,7 +274,7 @@ function renderPostCards(items,target){
     if(p.video&&view==='list'){media=el('div','post-media');const video=el('video');video.src=displayMedia(p.file);video.poster=displayMedia(p.preview);video.controls=true;video.playsInline=true;video.preload='none';media.append(video);feedVideoObserver.observe(video);}
     else {media=view==='grid'?button('','post-media',()=>openPost(posts.findIndex(x=>x.key===p.key))):el('div','post-media');if(view==='grid')media.setAttribute('aria-label','Открыть пост '+p.id);const image=el('img');image.src=displayMedia(view==='grid'?p.preview:(p.sample||p.file));image.alt=p.tags.slice(0,8).join(', ');image.loading='lazy';image.decoding='async';image.style.aspectRatio=p.width+'/'+p.height;const primary=view==='grid'?p.preview:(p.sample||p.file);let fallback=false;image.onerror=()=>{if(!fallback&&primary!==p.preview){fallback=true;image.src=displayMedia(p.preview);}else image.alt='Медиа недоступно — откройте оригинал';};media.append(image);if(p.video)media.append(el('span','video-badge','▶ VIDEO'));}
     card.append(media);const footer=el('div','post-footer');const save=button(isSaved(p)?'♥':'♡',isSaved(p)?'saved':'',()=>toggleFavorite(p));save.dataset.favoriteKey=p.key;save.setAttribute('aria-label',isSaved(p)?'Убрать из сохранённых':'Сохранить пост');let open;if(view==='grid')open=button('Открыть','view-label',()=>openPost(posts.findIndex(x=>x.key===p.key)));else{open=el('a','post-original','Оригинал ↗');open.href=displayMedia(p.file);open.target='_blank';open.rel='noopener noreferrer';}
-    const share=button('↗','share-post',()=>sharePost(p));share.setAttribute('aria-label','Поделиться постом '+p.id);share.title='Поделиться ссылкой на оригинальный пост';footer.append(save,open,share,el('span','post-score','↑ '+p.score));card.append(footer);
+    const share=button('↗','share-post',()=>sharePost(p));share.setAttribute('aria-label','Поделиться постом '+p.id);share.title='Поделиться ссылкой на оригинальный пост';const download=el('a','download-post','↓');download.href=displayMedia(p.file);download.download=downloadFilename(p);download.setAttribute('aria-label','Скачать оригинал '+p.id);download.title='Скачать оригинал';const similar=button('Похожие','similar-post',()=>openSimilar(p));similar.setAttribute('aria-label','Похожие на пост '+p.id);footer.append(save,open,download,share,similar,el('span','post-score','↑ '+p.score));card.append(footer);
     const details=el('details','inline-tags');details.append(el('summary','','Теги · '+p.tags.length));const tags=el('div','grouped-tags');renderGroupedTags(tags,p,addPostTag);details.append(tags);card.append(details);fragment.append(card);
   }
   target.append(fragment);
@@ -287,13 +288,30 @@ function renderGroupedTags(container,p,action){
 function addPostTag(value){
   commitDraft();selected=mergeTags(selected,[{value,excluded:false}]);activeCollection=null;tab='feed';reload();window.scrollTo?.({top:0,behavior:'smooth'});
 }
-function openPost(index){
-  if(index<0||index>=posts.length)return;current=index;const p=posts[index];pauseMedia();$('media').replaceChildren();
+function openPost(index,items=posts){
+  if(index<0||index>=items.length)return;viewerItems=items;current=index;const p=items[index];pauseMedia();$('media').replaceChildren();
   const media=el(p.video?'video':'img');media.src=displayMedia(p.video?p.file:(p.sample||p.file));if(p.video){media.controls=true;media.playsInline=true;media.loop=true;}else media.alt=p.tags.join(', ');
-  $('media').append(media);$('viewerSource').textContent=(p.source||'Booru')+' / #'+p.id;$('original').href=displayMedia(p.file);$('savePost').textContent=isSaved(p)?'♥ Пост сохранён':'♡ Сохранить пост';$('tags').replaceChildren();
+  $('media').append(media);$('viewerSource').textContent=(p.source||'Booru')+' / #'+p.id;$('original').href=displayMedia(p.file);$('downloadPost').href=displayMedia(p.file);$('downloadPost').download=downloadFilename(p);$('savePost').textContent=isSaved(p)?'♥ Пост сохранён':'♡ Сохранить пост';$('tags').replaceChildren();
   renderGroupedTags($('tags'),p,addPostTag);
-  $('previous').disabled=index===0;$('next').disabled=index===posts.length-1;if(!$('viewer').open)$('viewer').showModal();
+  $('previous').disabled=index===0;$('next').disabled=index===items.length-1;if(!$('viewer').open)$('viewer').showModal();
 }
+async function openSimilar(post){
+  pauseMedia();const token=++similarToken;similarItems=[];$('similarGrid').replaceChildren();$('similarTitle').textContent='Похожие на #'+post.id;$('similarStatus').textContent='Ищем по тегам персонажа, автора и другим совпадениям…';if(!$('similarDialog').open)$('similarDialog').showModal();
+  const descriptor=savedPostSource(post),s=sources.find(s=>s.id===post.sourceId)||sources.find(s=>sourceTemplate(s).id===descriptor.id)||descriptor;
+  const plans=similarQueries(post);if(!plans.length){$('similarStatus').textContent='У поста нет подходящих тегов для подбора.';return;}
+  const constraints=selected.filter(t=>t.excluded||/^rating:/.test(t.value));const rows=[];let failed=false;
+  for(const plan of plans){
+    if(token!==similarToken)return;$('similarStatus').textContent='Ищем: '+plan.label.toLowerCase()+'…';
+    try{const query=searchTags(s,mergeTags(parseTags(plan.query),constraints),'score');const payload=await get(makeRequest(s,query,0,12));rows.push(...normalizePosts(payload,s));}catch{failed=true;}
+  }
+  if(token!==similarToken)return;
+  similarItems=rankSimilarPosts(post,rows);
+  for(const [index,p]of similarItems.entries()){
+    const card=button('','similar-card',()=>{const items=similarItems;closeDialog('similarDialog');openPost(index,items);});card.setAttribute('aria-label','Открыть похожий пост '+p.id);const image=el('img');image.src=displayMedia(p.preview);image.alt='Пост #'+p.id;image.loading='lazy';card.append(image,el('span','','#'+p.id+' · ↑ '+p.score));$('similarGrid').append(card);
+  }
+  $('similarStatus').textContent=similarItems.length?'Совпадения по тегам. Визуальное сходство не анализируется.' :failed?'Не удалось получить подборку. Проверьте доступ к API источника.':'Других постов с подходящими тегами не найдено.';
+}
+$('similarClose').onclick=()=>closeDialog('similarDialog');$('similarDialog').onclose=()=>{similarToken++;};$('similarPost').onclick=()=>{if(viewerItems[current])openSimilar(viewerItems[current]);};
 function applyTemplate(t){
   $('sourceTitle').value=t.name;$('sourceBase').value=t.base;$('sourceKind').value=t.kind;$('sourceUser').value='';$('sourceKey').value='';$('sourceMediaRelay').checked=mediaRelay[t.id]===true;updateSourceHint();
 }
@@ -357,12 +375,12 @@ $('sourceKind').onchange=updateSourceHint;$('sourceBase').oninput=updateSourceHi
 $('addSource').onclick=()=>openSource();$('addSourceFromSettings').onclick=()=>openSource();$('sourceClose').onclick=()=>closeDialog('sourceEditor');
 $('newCollection').onclick=()=>openCollection();$('saveCollection').onclick=()=>openCollection();$('collectionClose').onclick=()=>closeDialog('collectionEditor');$('collectionsOpen').onclick=()=>{renderCollections();$('collectionsDialog').showModal();};$('collectionsClose').onclick=()=>closeDialog('collectionsDialog');$('createCollectionFromPicker').onclick=()=>openCollection();
 $('settingsOpen').onclick=()=>{renderManage();$('settings').showModal();};$('settingsClose').onclick=()=>closeDialog('settings');
-$('closeViewer').onclick=closeViewer;$('viewer').onclose=pauseMedia;$('previous').onclick=()=>openPost(current-1);$('next').onclick=()=>openPost(current+1);$('savePost').onclick=()=>{if(posts[current])toggleFavorite(posts[current]);};
-document.addEventListener('keydown',e=>{if($('viewer').open){if(e.key==='ArrowLeft')openPost(current-1);if(e.key==='ArrowRight')openPost(current+1);}});
+$('closeViewer').onclick=closeViewer;$('viewer').onclose=pauseMedia;$('previous').onclick=()=>openPost(current-1,viewerItems);$('next').onclick=()=>openPost(current+1,viewerItems);$('savePost').onclick=()=>{if(viewerItems[current])toggleFavorite(viewerItems[current]);};
+document.addEventListener('keydown',e=>{if($('viewer').open&&!$('similarDialog').open){if(e.key==='ArrowLeft')openPost(current-1,viewerItems);if(e.key==='ArrowRight')openPost(current+1,viewerItems);}});
 async function shareLink(url,title='Booru Pocket'){
   try{if(navigator.share)await navigator.share({title,url});else if(navigator.clipboard){await navigator.clipboard.writeText(url);showNotice('Ссылка скопирована.');}else showNotice('Ссылка: '+url);}catch(error){if(error.name!=='AbortError')showNotice('Ссылка: '+url);}
 }
 function sharePost(post){const url=originalPostUrl(post);if(!url){showNotice('У поста нет ссылки на оригинал.');return;}return shareLink(url,(post.source||'Booru')+' · #'+post.id);}
 $('shareSearch').onclick=()=>shareLink(new URL(routeFor(),window.location.href).href,$('feedTitle').textContent);
-$('sharePost').onclick=()=>{if(posts[current])sharePost(posts[current]);};
+$('sharePost').onclick=()=>{if(viewerItems[current])sharePost(viewerItems[current]);};
 count();persistSources();renderHome();renderTags();initNavigation();

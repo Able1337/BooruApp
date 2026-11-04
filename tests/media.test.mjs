@@ -22,7 +22,7 @@ test('relay streams bounded media, preserves range, supplies source referer and 
  server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>server.close());
  const base=`http://127.0.0.1:${server.address().port}/media?url=`;
  let response=await fetch(base+encodeURIComponent(gel),{headers:{Range:'bytes=0-2'}});
- assert.equal(response.status,206);assert.equal(await response.text(),'abc');assert.equal(response.headers.get('content-range'),'bytes 0-2/10');
+ assert.equal(response.status,206);assert.match(response.headers.get('content-disposition'),/^inline; filename="gelbooru-03943500cce9c87959f382e0ed3c969c.webm"$/);assert.equal(await response.text(),'abc');assert.equal(response.headers.get('content-range'),'bytes 0-2/10');
  assert.equal(calls[0].options.headers.Referer,'https://gelbooru.com/');assert.equal(calls[0].options.headers.Range,'bytes=0-2');assert.equal(calls[0].options.redirect,'error');assert.equal(calls[0].options.headers.Authorization,undefined);
  response=await fetch(base+encodeURIComponent(e621),{method:'HEAD'});assert.equal(response.status,200);assert.equal(await response.text(),'');assert.equal(calls.at(-1).options.headers.Referer,'https://e621.net/');
  const count=calls.length;

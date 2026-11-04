@@ -82,3 +82,13 @@ test('saved posts have separate booru sections and only individual original post
  $('grid').querySelectorAll('.share-post')[1].click();await app.tick();assert.equal(shared.url,'https://e621.net/posts/2');assert.ok(!shared.url.includes('#saved'));
  $('gridView').click();assert.equal($('grid').querySelectorAll('.posts-grid').length,2);
 });
+test('related posts use the original provider and viewer favorites use the recommended post',async t=>{
+ let payload=[{id:1,file_url:'https://example.org/a.png',preview_url:'https://example.org/p.png',tags:'hero sky',tag_string_character:'hero'}];
+ const app=await setup({server:true,fetcher:async()=>({ok:true,json:async()=>payload})});t.after(app.cleanup);const{$}=app;
+ $('feedTab').click();await app.tick();payload=[...payload,{id:2,file_url:'https://example.org/b.png',preview_url:'https://example.org/b.png',tags:'hero sky'}];
+ $('grid').querySelector('.similar-post').click();for(let i=0;i<8;i++)await app.tick();
+ assert.equal($('similarDialog').open,true);assert.equal($('similarGrid').children.length,1);assert.match($('similarStatus').textContent,/по тегам/);
+ const related=app.requests.slice(1);assert.ok(related.length<=3);assert.ok(related.every(r=>new URL(JSON.parse(r.options.body).url).hostname==='safebooru.org'));
+ $('similarGrid').children[0].click();assert.equal($('viewer').open,true);assert.match($('viewerSource').textContent,/#2/);assert.equal($('downloadPost').download,'safebooru-2.png');
+ $('savePost').click();assert.equal(JSON.parse(app.memory.get('bp.saved'))[0].id,'2');
+});

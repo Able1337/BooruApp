@@ -136,3 +136,19 @@ test('saved posts group by provider even when local source IDs change or Rule34 
  assert.equal(originalPostUrl({id:'5',key:'https://danbooru.donmai.us/#5'}),'https://danbooru.donmai.us/posts/5');
  assert.equal(originalPostUrl({id:'x',key:'https://rule34.xxx/#x',page:'javascript:alert(1)'}),'');
 });
+test('download names retain real formats and identify the provider and original media',async()=>{
+ const {relayFilename,downloadFilename}=await import('../web/core.mjs');
+ assert.equal(relayFilename('https://img4.gelbooru.com/images/ab/cd/unique.png','gelbooru','image/png'),'gelbooru-unique.png');
+ assert.equal(relayFilename('https://static1.e621.net/data/ab/cd/unique.webm','e621','video/webm'),'e621-unique.webm');
+ assert.equal(relayFilename('https://img4.gelbooru.com/images/ab/cd/wrong.jpg','gelbooru','image/png'),'gelbooru-wrong.png');
+ assert.equal(downloadFilename({id:'123',key:'https://gelbooru.com/#123',file:'https://img4.gelbooru.com/a.png'}),'gelbooru-123.png');
+});
+test('similar queries prefer tag categories and ranked results deduplicate and exclude the original',async()=>{
+ const {similarQueries,rankSimilarPosts}=await import('../web/core.mjs');
+ const original={id:'1',key:'source#1',tags:['hero','artist','sky','1girl'],tagGroups:{character:['hero'],artist:['artist'],general:['sky','1girl']}};
+ assert.deepEqual(similarQueries(original).map(q=>q.query),['hero','artist','sky']);
+ const a={id:'2',key:'source#2',tags:['hero'],score:1},b={id:'3',key:'source#3',tags:['artist','sky'],score:100},c={id:'4',key:'source#4',tags:['nothing'],score:100};
+ assert.deepEqual(rankSimilarPosts(original,[original,a,b,a,c]).map(p=>p.id),['2','3']);
+ assert.deepEqual(similarQueries({tags:['1girl','solo','sky','night']}),[{label:'Общие теги',query:'sky night'},{label:'Ещё по тегу',query:'night'}]);
+ assert.deepEqual(similarQueries({tags:[]}),[]);
+});
