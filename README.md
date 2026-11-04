@@ -1,6 +1,6 @@
 # Booru Pocket
 
-Сайт: **https://frank.eben-cord.ru/** — работает в Chrome без APK.
+Сайт: **https://frank.eben-grad.ru/** — работает в Chrome без APK.
 
 ## Как работает
 
@@ -37,7 +37,7 @@ npm test
 npm start
 ```
 
-Node 18+ для сервера, Node 22 в CI. Для локального HTTP допускается отсутствие `PUBLIC_ORIGIN`; на сервере выставлено `PUBLIC_ORIGIN=https://frank.eben-cord.ru`.
+Node 18+ для сервера, Node 22 в CI. Для локального HTTP допускается отсутствие `PUBLIC_ORIGIN`; на сервере выставлено `PUBLIC_ORIGIN=https://frank.eben-grad.ru`.
 
 ## Android (необязательный клиент)
 

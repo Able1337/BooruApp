@@ -37,10 +37,10 @@ jobs:
         run: |
           tar -czf "$RUNNER_TEMP/booru-source.tar.gz" web server scripts tests package.json
           sshpass -e scp -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/booru-known-hosts" "$RUNNER_TEMP/booru-source.tar.gz" root@109.120.140.198:/tmp/booru-source-${{ github.sha }}.tar.gz
-          sshpass -e ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/booru-known-hosts" root@109.120.140.198 'set -eu; mkdir -p /tmp/booru-source-${{ github.sha }}; tar -xzf /tmp/booru-source-${{ github.sha }}.tar.gz -C /tmp/booru-source-${{ github.sha }}; if [ "${{ inputs.remove_xray }}" = "true" ]; then bash /tmp/booru-source-${{ github.sha }}/scripts/retire-xray.sh; fi; bash /tmp/booru-source-${{ github.sha }}/scripts/install-server.sh frank.eben-cord.ru; rm -rf /tmp/booru-source-${{ github.sha }} /tmp/booru-source-${{ github.sha }}.tar.gz'
+          sshpass -e ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/booru-known-hosts" root@109.120.140.198 'set -eu; mkdir -p /tmp/booru-source-${{ github.sha }}; tar -xzf /tmp/booru-source-${{ github.sha }}.tar.gz -C /tmp/booru-source-${{ github.sha }}; if [ "${{ inputs.remove_xray }}" = "true" ]; then bash /tmp/booru-source-${{ github.sha }}/scripts/retire-xray.sh; fi; bash /tmp/booru-source-${{ github.sha }}/scripts/install-server.sh frank.eben-grad.ru; rm -rf /tmp/booru-source-${{ github.sha }} /tmp/booru-source-${{ github.sha }}.tar.gz'
       - name: Verify public page and API
         run: |
-          curl --fail --silent --show-error https://frank.eben-cord.ru/healthz
-          curl --fail --silent --show-error https://frank.eben-cord.ru/ | grep -q 'name="booru-api" content="same-origin"'
-          curl --fail --silent --show-error -H 'Content-Type: application/json' -H 'Origin: https://frank.eben-cord.ru' --data '{"url":"https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&pid=0&limit=1&tags=landscape"}' https://frank.eben-cord.ru/api/posts > "$RUNNER_TEMP/api-smoke.json"
+          curl --fail --silent --show-error https://frank.eben-grad.ru/healthz
+          curl --fail --silent --show-error https://frank.eben-grad.ru/ | grep -q 'name="booru-api" content="same-origin"'
+          curl --fail --silent --show-error -H 'Content-Type: application/json' -H 'Origin: https://frank.eben-grad.ru' --data '{"url":"https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&pid=0&limit=1&tags=landscape"}' https://frank.eben-grad.ru/api/posts > "$RUNNER_TEMP/api-smoke.json"
           node -e 'const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/api-smoke.json","utf8"));if(!Array.isArray(d)&&!Array.isArray(d.post)&&!Array.isArray(d.posts))process.exit(1);console.log("Live API response is a post list")'

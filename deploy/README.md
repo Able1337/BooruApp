@@ -1,6 +1,6 @@
 # Server deployment
 
-Target: `https://frank.eben-cord.ru/` on `109.120.140.198`.
+Target: `https://frank.eben-grad.ru/` on `109.120.140.198`.
 
 The browser calls same-origin `POST /api/posts`. The server forwards only bounded post-list requests to the Safebooru, Rule34 and Danbooru HTTPS APIs. Upstream redirects are rejected, API responses are capped at 4 MiB, requests time out after 25 seconds, and concurrency/rate limits apply. API keys are sent in POST bodies from the browser and in provider-required query parameters only on the outbound HTTPS request. Request bodies and provider errors are not logged. Media is loaded directly from its original HTTPS source.
 
@@ -11,7 +11,7 @@ Favorites and source credentials remain in browser local storage, separately for
 On Debian/Ubuntu, from a checked-out source tree, as root:
 
 ```sh
-bash scripts/install-server.sh frank.eben-cord.ru
+bash scripts/install-server.sh frank.eben-grad.ru
 ```
 
 The installer uses Node 18+ with no npm dependencies, nginx, systemd and Certbot. DNS A/AAAA records must point at the server; ports 80 and 443 must be reachable. It creates a dedicated unprivileged `booru-pocket` user, serves on loopback port 18737, backs up this application's configuration in `/var/backups/booru-pocket`, and preserves unrelated virtual hosts. If the domain belongs to an existing nginx vhost or port 18737 is occupied by another service, installation stops for review.
@@ -24,7 +24,7 @@ For automatic deployment, run the **Deploy server** Actions workflow. It uses th
 
 ```sh
 npm test
-curl --fail https://frank.eben-cord.ru/healthz
+curl --fail https://frank.eben-grad.ru/healthz
 ```
 
 The deployment workflow additionally verifies the server-specific page marker and a real Safebooru API response. Rule34 needs the user's own API credentials; it cannot be verified using the deployment secret. Runtime API credentials are unrelated to SSH credentials.

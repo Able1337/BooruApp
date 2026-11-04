@@ -10,11 +10,11 @@ test('server proxy only accepts bounded post-list requests to supported HTTPS AP
 });
 test('same-origin server API, static mode, upstream failures and credential privacy',async t=>{
  let requests=[];let result=new Response(JSON.stringify([{id:1}]),{headers:{'Content-Type':'application/json'}});
- const server=http.createServer(createApp({publicOrigin:'https://frank.eben-cord.ru',upstream:async(url,options)=>{requests.push({url,options});return result;}}));
+ const server=http.createServer(createApp({publicOrigin:'https://frank.eben-grad.ru',upstream:async(url,options)=>{requests.push({url,options});return result;}}));
  server.listen(0,'127.0.0.1');await once(server,'listening');
  t.after(()=>server.close());
  const base=`http://127.0.0.1:${server.address().port}`;
- const post=(url=target,origin='https://frank.eben-cord.ru')=>fetch(base+'/api/posts',{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify({url})});
+ const post=(url=target,origin='https://frank.eben-grad.ru')=>fetch(base+'/api/posts',{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify({url})});
  assert.equal((await fetch(base+'/')).status,200);
  assert.match(await(await fetch(base+'/')).text(),/name="booru-api" content="same-origin"/);
  assert.equal((await fetch(base+'/.git/config')).status,404);

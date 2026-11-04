@@ -17,7 +17,7 @@ import org.json.*;
 
 public class MainActivity extends Activity {
     private static final String LOCAL="https://appassets.androidplatform.net/";
-    private static final String REMOTE="https://frank.eben-cord.ru/";
+    private static final String REMOTE="https://frank.eben-grad.ru/";
     private static final int FILE_PICK=10, EXPORT=11, MAX_BYTES=4*1024*1024;
     private WebView web;
     private WebMessagePort nativePort;

@@ -3,7 +3,7 @@
 set -euo pipefail
 umask 027
 cd "$(dirname "$0")/.."
-site_domain="${1:-frank.eben-cord.ru}"
+site_domain="${1:-frank.eben-grad.ru}"
 site_port="${2:-443}"
 if [[ ! "$site_port" =~ ^[0-9]+$ ]] || (( (site_port < 1024 && site_port != 443) || site_port > 65535)); then echo 'Invalid HTTPS port.' >&2; exit 1; fi
 site_origin="https://$site_domain"
