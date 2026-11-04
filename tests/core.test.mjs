@@ -156,7 +156,7 @@ test('provider collection packs use provider-specific queries and persist edits 
  const {SOURCE_TEMPLATES,sourceCollectionPresets,addCollectionPresets}=await import('../web/core.mjs');
  const sources=SOURCE_TEMPLATES.map(s=>({...s}));
  const rule=sourceCollectionPresets(sources.find(s=>s.id==='rule34')),furry=sourceCollectionPresets(sources.find(s=>s.id==='e621'));
- assert.deepEqual(rule.map(c=>c.name),['Trend','Top','Animated','Gay','Femboy']);assert.equal(rule.find(c=>c.name==='Gay').query,'yaoi');assert.equal(furry.find(c=>c.name==='Gay').query,'male/male');assert.equal(furry.find(c=>c.name==='Femboy').query,'girly male');assert.ok(rule.every(c=>c.sourceId==='rule34'));
+ assert.deepEqual(rule.map(c=>c.name),['Trend','Top','Animated']);assert.deepEqual(furry.map(c=>c.name),['Trend','Top','Animated','Hot']);assert.equal(furry.find(c=>c.name==='Hot').query,'order:hot');assert.ok(rule.every(c=>c.sourceId==='rule34'));
  assert.equal(sourceCollectionPresets(sources.find(s=>s.id==='safebooru')).length,3);
  const own={id:'own',name:'Моя коллекция',query:'sky -city',sourceId:'rule34',sort:'score'};
  const first=addCollectionPresets([own,...rule.slice(0,1)],sources);assert.equal(first.collections.filter(c=>c.sourceId==='rule34'&&c.name==='Trend').length,1);assert.ok(first.collections.includes(own));
@@ -164,4 +164,19 @@ test('provider collection packs use provider-specific queries and persist edits 
  const again=addCollectionPresets(edited,sources,first.applied);assert.deepEqual(again.collections,edited);assert.equal(again.collections.find(c=>c.id===rule[0].id).query,'forest');
  const duplicate=addCollectionPresets([{id:'user-trend',name:'R34 trend',query:'score:>50',sort:'new',sourceId:'rule34'}],[sources[0]]);assert.equal(duplicate.collections.filter(c=>c.query==='score:>50').length,1);
  const legacy=addCollectionPresets([{id:'sky',name:'Небо',query:'sky',sourceId:'*',sort:'new'},{id:'city',name:'Изменённый город',query:'city',sourceId:'*',sort:'new'}],[sources[0]]);assert.ok(!legacy.collections.some(c=>c.id==='sky'));assert.ok(legacy.collections.some(c=>c.id==='city'));
+});
+test('all standard sources are added once, credentials survive, and deleted providers stay deleted',async()=>{
+ const {addDefaultSources,sourceAuthWarning}=await import('../web/core.mjs');
+ const configured={id:'my-rule',name:'R34',base:'https://api.rule34.xxx/',kind:'gelbooru',userId:'123',apiKey:'private-test'};
+ const first=addDefaultSources([configured]);assert.equal(first.sources.length,5);assert.deepEqual(first.sources.find(s=>s.id==='my-rule'),configured);assert.equal(sourceAuthWarning(configured),'');
+ assert.match(sourceAuthWarning(first.sources.find(s=>s.id==='builtin-gelbooru')),/API key/);assert.equal(sourceAuthWarning(first.sources.find(s=>s.id==='builtin-e621')),'');
+ const removed=first.sources.filter(s=>s.id!=='builtin-e621');assert.deepEqual(addDefaultSources(removed,first.applied).sources,removed);
+ assert.match(sourceAuthWarning({base:'https://e621.net/',kind:'e621',login:'test'}),/вместе/);
+});
+test('obsolete factory collections are removed even from older imports without deleting personal collections',async()=>{
+ const {addCollectionPresets}=await import('../web/core.mjs');
+ const source={id:'rule',name:'R34',base:'https://api.rule34.xxx/',kind:'gelbooru'};
+ const obsolete={id:'preset-abc-rule34-gay',name:'Gay',query:'yaoi',sort:'score',sourceId:'rule'};
+ const own={...obsolete,id:'own-gay'};
+ const next=addCollectionPresets([obsolete,own],[source],['standard-pack-v2']);assert.ok(!next.collections.some(c=>c.id===obsolete.id));assert.ok(next.collections.some(c=>c.id===own.id));
 });

@@ -1,4 +1,4 @@
-import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource,mediaUrl,encodeRoute,decodeRoute,routeHistoryMode,savedPostSource,groupSavedPosts,originalPostUrl,downloadFilename,similarQueries,rankSimilarPosts,addCollectionPresets} from './core.mjs';
+import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource,mediaUrl,encodeRoute,decodeRoute,routeHistoryMode,savedPostSource,groupSavedPosts,originalPostUrl,downloadFilename,similarQueries,rankSimilarPosts,addCollectionPresets,addDefaultSources,sourceAuthWarning} from './core.mjs';
 const $=id=>document.getElementById(id);
 const el=(tag,cls='',text='')=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text)n.textContent=text;return n;};
 const button=(text,cls,action)=>{const n=el('button',cls,text);n.type='button';n.onclick=action;return n;};
@@ -7,7 +7,8 @@ function read(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fa
 function persist(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch{showNotice('Не удалось сохранить данные: хранилище браузера заполнено.');return false;}}
 function showNotice(text=''){ $('notice').textContent=text;$('notice').hidden=!text; }
 let sources=sanitizeSources(read('bp.sources',null),read('bp.source',null));
-let activeId=read('bp.activeId','');if(!sources.some(s=>s.id===activeId))activeId=sources[0].id;
+const initialSources=addDefaultSources(sources,read('bp.sourceDefaults',[]));sources=initialSources.sources;let appliedSourceDefaults=initialSources.applied;
+let activeId=read('bp.activeId','');if(!sources.some(s=>s.id===activeId))activeId=(sources.find(s=>sourceTemplate(s).id==='safebooru')||sources[0]).id;
 let saved;try{saved=sanitizeFavorites(read('bp.saved',[]));}catch{saved=[];}
 let collections=sanitizeCollections(read('bp.collections',[]));
 let appliedCollectionPresets=read('bp.collectionPresets',[]);
@@ -27,7 +28,7 @@ mediaRelay={gelbooru:true,e621:true,...mediaRelay};
 if(serverApi&&read('bp.mediaRelayVersion',0)<1){mediaRelay.gelbooru=true;mediaRelay.e621=true;persist('bp.mediaRelay',mediaRelay);persist('bp.mediaRelayVersion',1);}
 const displayMedia=url=>serverApi?mediaUrl(url,mediaRelay):url;
 const source=()=>sources.find(s=>s.id===activeId)||sources[0];
-function persistSources(){ensureCollectionPresets();persist('bp.sources',sources);persist('bp.activeId',activeId);persist('bp.source',source());}
+function persistSources(){ensureCollectionPresets();persist('bp.sourceDefaults',appliedSourceDefaults);persist('bp.sources',sources);persist('bp.activeId',activeId);persist('bp.source',source());}
 function ensureCollectionPresets(){
   const next=addCollectionPresets(collections,sources,appliedCollectionPresets);collections=next.collections;appliedCollectionPresets=next.applied;persist('bp.collections',collections);persist('bp.collectionPresets',appliedCollectionPresets);
 }
@@ -74,7 +75,7 @@ async function get(url,kind='posts'){
 }
 function renderSourceSelect(){
   $('sourceSelect').replaceChildren();
-  for(const s of sources){const o=el('option','',s.name);o.value=s.id;$('sourceSelect').append(o);}
+  for(const s of sources){const o=el('option','',s.name+(sourceAuthWarning(s)?' !':''));o.value=s.id;$('sourceSelect').append(o);}
   $('sourceSelect').value=activeId;const t=sourceTemplate(source());$('sourceMark').textContent=t.mark;$('sourceMark').dataset.color=t.color;$('sourceSelect').title=source().name;
 }
 function routeFor(s=source(),tags=selected,options={}){
@@ -116,6 +117,7 @@ function renderHome(){
     const card=el('article','source-card'+(s.id===activeId?' selected':''));card.dataset.color=sourceTemplate(s).color;
     const image=coverImage(covers[s.id]);if(image)card.append(image);
     const main=routeLink('source-card-main',routeFor(s,selected,{page:'feed',collection:''}),()=>setActive(s.id,true));main.append(mark(s),el('strong','',s.name),el('small','',new URL(s.base).hostname+'  ↗'));
+    const warning=sourceAuthWarning(s);if(warning){const alert=button('!','source-warning',()=>openSource(s.id));alert.title=warning;alert.setAttribute('aria-label',s.name+': '+warning);card.append(alert);}
     const edit=button('⋯','card-edit',()=>openSource(s.id));edit.setAttribute('aria-label','Изменить '+s.name);card.append(main,edit);$('sourceCards').append(card);
   }
   const add=button('','source-card-add',()=>openSource());add.append(el('span','','＋'),el('strong','','Добавить booru'));$('sourceCards').append(add);
@@ -156,6 +158,7 @@ function updateCollectionArt(c,entry){
 }
 function requestCollectionCover(c){
   const d=collectionCoverDescriptor(c);if(!d)return;
+  const authWarning=sourceAuthWarning(d.source);if(authWarning){updateCollectionArt(c,{url:'',error:authWarning});return;}
   const cached=coverCache.get(d.key)||(c.coverKey===d.key&&c.cover?{url:c.cover,at:c.coverCheckedAt||0}:null);
   if(cached&&Date.now()-cached.at<(cached.error?30000:300000)){if(!cached.error&&(c.coverKey!==d.key||c.cover!==cached.url)){c.cover=cached.url;c.coverKey=d.key;c.coverCheckedAt=cached.at;persist('bp.collections',collections);}updateCollectionArt(c,cached);return;}
   const id=coverEpoch+'|'+d.key;if(coverPending.has(id))return;
@@ -276,7 +279,7 @@ function renderPostCards(items,target){
     let media;
     if(p.video&&view==='list'){media=el('div','post-media');const video=el('video');video.src=displayMedia(p.file);video.poster=displayMedia(p.preview);video.controls=true;video.playsInline=true;video.preload='none';media.append(video);feedVideoObserver.observe(video);}
     else {media=view==='grid'?button('','post-media',()=>openPost(posts.findIndex(x=>x.key===p.key))):el('div','post-media');if(view==='grid')media.setAttribute('aria-label','Открыть пост '+p.id);const image=el('img');image.src=displayMedia(view==='grid'?p.preview:(p.sample||p.file));image.alt=p.tags.slice(0,8).join(', ');image.loading='lazy';image.decoding='async';image.style.aspectRatio=p.width+'/'+p.height;const primary=view==='grid'?p.preview:(p.sample||p.file);let fallback=false;image.onerror=()=>{if(!fallback&&primary!==p.preview){fallback=true;image.src=displayMedia(p.preview);}else image.alt='Медиа недоступно — откройте оригинал';};media.append(image);if(p.video)media.append(el('span','video-badge','▶ VIDEO'));}
-    card.append(media);const footer=el('div','post-footer');const save=button(isSaved(p)?'♥':'♡',isSaved(p)?'saved':'',()=>toggleFavorite(p));save.dataset.favoriteKey=p.key;save.setAttribute('aria-label',isSaved(p)?'Убрать из сохранённых':'Сохранить пост');let open;if(view==='grid')open=button('Открыть','view-label',()=>openPost(posts.findIndex(x=>x.key===p.key)));else{open=el('a','post-original','Оригинал ↗');open.href=displayMedia(p.file);open.target='_blank';open.rel='noopener noreferrer';}
+    card.append(media);const footer=el('div','post-footer');const save=button(isSaved(p)?'♥':'♡',isSaved(p)?'saved':'',()=>toggleFavorite(p));save.classList.add('favorite-button');save.dataset.favoriteKey=p.key;save.setAttribute('aria-label',isSaved(p)?'Убрать из сохранённых':'Сохранить пост');let open;if(view==='grid')open=button('Открыть','view-label',()=>openPost(posts.findIndex(x=>x.key===p.key)));else{open=el('a','post-original','Оригинал ↗');open.href=displayMedia(p.file);open.target='_blank';open.rel='noopener noreferrer';}
     const share=button('↗','share-post',()=>sharePost(p));share.setAttribute('aria-label','Поделиться постом '+p.id);share.title='Поделиться ссылкой на оригинальный пост';const download=el('a','download-post','↓');download.href=displayMedia(p.file);download.download=downloadFilename(p);download.setAttribute('aria-label','Скачать оригинал '+p.id);download.title='Скачать оригинал';const similar=button('Похожие','similar-post',()=>openSimilar(p));similar.setAttribute('aria-label','Похожие на пост '+p.id);footer.append(save,open,download,share,similar,el('span','post-score','↑ '+p.score));card.append(footer);
     const details=el('details','inline-tags');details.append(el('summary','','Теги · '+p.tags.length));const tags=el('div','grouped-tags');renderGroupedTags(tags,p,addPostTag);details.append(tags);card.append(details);fragment.append(card);
   }
@@ -351,21 +354,43 @@ function applyCollection(c){
   if(c.sourceId!=='*'){if(!sources.some(s=>s.id===c.sourceId)){showNotice('Источник этой коллекции удалён. Измените источник в настройках коллекции.');return;}if(activeId!==c.sourceId)invalidateCollectionCovers();activeId=c.sourceId;persistSources();renderSourceSelect();}
   selected=parseTags(c.query);sort=c.sort;persist('bp.sort',sort);$('query').value='';activeCollection=c.id;tab='feed';reload();window.scrollTo?.({top:0,behavior:'smooth'});
 }
-function renderManage(){ $('manageSources').replaceChildren();for(const s of sources){const n=button('','manage-row',()=>openSource(s.id));const text=el('span');text.append(el('strong','',s.name),el('small','',new URL(s.base).hostname));n.append(mark(s),text,el('span','edit-mark','✎'));$('manageSources').append(n);} }
+function renderManage(){ $('manageSources').replaceChildren();for(const s of sources){const n=button('','manage-row',()=>openSource(s.id));const text=el('span');text.append(el('strong','',s.name),el('small','',sourceAuthWarning(s)||new URL(s.base).hostname));n.append(mark(s),text,el('span','edit-mark','✎'));$('manageSources').append(n);} }
 $('exportSaved').onclick=()=>{
-  const data={version:2,sources:sources.map(({apiKey,...s})=>s),collections,saved,activeId,view,sort};const body=JSON.stringify(data,null,2);
+  const includeKeys=$('exportKeys').checked;const data={version:3,sources:sources.map(s=>{const copy={...s};if(!includeKeys)delete copy.apiKey;return copy;}),collections,saved,activeId,view,sort,mediaRelay,collectionPresets:appliedCollectionPresets,sourceDefaults:appliedSourceDefaults,covers};const body=JSON.stringify(data,null,2);
   if(port){port.postMessage(JSON.stringify({id:String(++serial),op:'export',body}));return;}
   const a=el('a');a.href=URL.createObjectURL(new Blob([body],{type:'application/json'}));a.download='booru-pocket-library.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 };
 $('importSaved').onchange=async e=>{
-  try{const file=e.target.files[0];if(!file)return;if(file.size>5*1024*1024)throw new Error('Файл больше 5 МБ');const data=JSON.parse(await file.text());
-    const incoming=Array.isArray(data)?data:data?.saved;if(!Array.isArray(incoming))throw new Error('Ожидается библиотека или массив публикаций');
-    saved=[...new Map([...saved,...sanitizeFavorites(incoming)].map(p=>[p.key,p])).values()];
-    if(!Array.isArray(data)){
-      if(Array.isArray(data.sources)&&data.sources.length){const imported=sanitizeSources(data.sources).map(s=>({...s,apiKey:''}));sources=[...new Map([...imported,...sources].map(s=>[s.id,s])).values()].slice(0,30);persistSources();}
-      collections=[...new Map([...collections,...sanitizeCollections(data.collections)].map(c=>[c.id,c])).values()].slice(0,200);persist('bp.collections',collections);
+  try{
+    const file=e.target.files[0];if(!file)return;if(file.size>20*1024*1024)throw new Error('Файл больше 20 МБ');const data=JSON.parse(await file.text());
+    const legacy=Array.isArray(data);if(!legacy&&(!data||typeof data!=='object'))throw new Error('Ожидается JSON библиотеки');
+    const incoming=legacy?data:data.saved||[];if(!Array.isArray(incoming)||!legacy&&!['saved','sources','collections'].some(k=>Array.isArray(data[k])))throw new Error('Ожидается библиотека или массив публикаций');
+    const sourceAliases=new Map();
+    let nextSources=[...sources],nextCollections=collections,nextActive=activeId,nextView=view,nextSort=sort,nextRelay=mediaRelay,nextCovers={...covers},nextPresets=appliedCollectionPresets,nextDefaults=appliedSourceDefaults;
+    const nextSaved=[...new Map([...saved,...sanitizeFavorites(incoming)].map(p=>[p.key,p])).values()];
+    if(!legacy){
+      if(data.sources!==undefined){
+        if(!Array.isArray(data.sources)||data.sources.length>30)throw new Error('Недопустимый список booru');
+        for(const raw of data.sources){
+          if(!raw||typeof raw.name!=='string'||!httpsUrl(raw.base)||!['gelbooru','danbooru','e621'].includes(raw.kind)||Object.hasOwn(raw,'apiKey')&&(typeof raw.apiKey!=='string'||raw.apiKey.length>512))throw new Error('Недопустимые настройки booru');
+          const s=sanitizeSources([raw])[0];const existing=nextSources.find(x=>x.id===s.id);
+          if(!Object.hasOwn(raw,'apiKey')&&existing)s.apiKey=existing.apiKey||'';
+          const provider=sourceTemplate(s).id;const builtin=nextSources.find(x=>x.id!==s.id&&!data.sources.some(raw=>raw?.id===x.id)&&(x.id==='builtin-'+provider||x.id===provider)&&sourceTemplate(x).id===provider&&!x.apiKey);
+          if(builtin){sourceAliases.set(builtin.id,s.id);nextSources=nextSources.filter(x=>x.id!==builtin.id);nextCollections=nextCollections.map(c=>c.sourceId===builtin.id?{...c,sourceId:s.id}:c);if(nextActive===builtin.id)nextActive=s.id;}
+          nextSources=[...new Map([...nextSources,s].map(x=>[x.id,x])).values()];
+        }
+        if(nextSources.length>30)throw new Error('После импорта будет больше 30 booru');
+      }
+      if(data.collections!==undefined){if(!Array.isArray(data.collections))throw new Error('Недопустимый список коллекций');nextCollections=[...new Map([...nextCollections,...sanitizeCollections(data.collections).map(c=>({...c,sourceId:sourceAliases.get(c.sourceId)||c.sourceId}))].map(c=>[c.id,c])).values()].slice(0,200);}
+      if(nextSources.some(s=>s.id===data.activeId))nextActive=data.activeId;
+      if(['list','grid'].includes(data.view))nextView=data.view;if(['new','score','score_asc','random','old'].includes(data.sort))nextSort=data.sort;
+      if(data.mediaRelay&&typeof data.mediaRelay==='object'){nextRelay={...mediaRelay};for(const id of ['gelbooru','e621'])if(typeof data.mediaRelay[id]==='boolean')nextRelay[id]=data.mediaRelay[id];}
+      if(data.covers&&typeof data.covers==='object')for(const [id,url]of Object.entries(data.covers))if(nextSources.some(s=>s.id===id)&&httpsUrl(url))nextCovers[id]=httpsUrl(url);
+      if(Array.isArray(data.collectionPresets))nextPresets=[...new Set([...appliedCollectionPresets,...data.collectionPresets.filter(x=>typeof x==='string')])].slice(0,2000);
+      if(Array.isArray(data.sourceDefaults))nextDefaults=[...new Set([...appliedSourceDefaults,...data.sourceDefaults.filter(x=>SOURCE_TEMPLATES.some(t=>t.id===x))])];
     }
-    persist('bp.saved',saved);count();renderHome();closeDialog('settings');if(tab!=='home')reload();showNotice('Библиотека импортирована. API-ключи введите отдельно для новых источников.');
+    sources=nextSources;collections=nextCollections;saved=nextSaved;activeId=nextActive;view=nextView;sort=nextSort;mediaRelay=nextRelay;covers=nextCovers;appliedCollectionPresets=nextPresets;appliedSourceDefaults=nextDefaults;
+    invalidateCollectionCovers();persistSources();persist('bp.saved',saved);persist('bp.view',view);persist('bp.sort',sort);persist('bp.mediaRelay',mediaRelay);persist('bp.covers',covers);count();renderHome();closeDialog('settings');if(tab!=='home')reload();else updateView();showNotice('Библиотека импортирована: booru, коллекции, посты и настройки.');
   }catch(err){showNotice('Не удалось импортировать: '+err.message);}finally{e.target.value='';}
 };
 $('searchForm').onsubmit=e=>{e.preventDefault();runSearch();};$('clearQuery').onclick=()=>{selected=[];$('query').value='';renderTags();hideSuggestions();if(tab!=='home')reload();};

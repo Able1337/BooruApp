@@ -299,7 +299,7 @@ export function sourceCollectionPresets(source){
   const provider=sourceTemplate(source).id;if(!provider||!source.id)return [];
   let hash=2166136261;for(const char of source.id)hash=Math.imul(hash^char.charCodeAt(0),16777619)>>>0;
   const pack=[['trend','Trend','score:>50','new'],['top','Top','','score'],['animated','Animated','animated score:>50','new']];
-  if(['rule34','e621'].includes(provider))pack.push(['gay','Gay',provider==='e621'?'male/male':'yaoi','score'],['femboy','Femboy',provider==='e621'?'girly male':'femboy','score']);
+  if(provider==='e621')pack.push(['hot','Hot','order:hot','new']);
   return pack.map(([key,name,query,sort])=>({id:'preset-'+hash.toString(36)+'-'+provider+'-'+key,name,query,sort,sourceId:source.id,cover:''}));
 }
 export function addCollectionPresets(collections,sources,applied=[]){
@@ -308,6 +308,10 @@ export function addCollectionPresets(collections,sources,applied=[]){
     const old={landscape:['Пейзажи','landscape','new'],city:['Город','city','new'],sky:['Небо','sky','new'],top:['По оценке','','score']};
     rows=rows.filter(c=>{const legacy=old[c.id];return !(legacy&&c.sourceId==='*'&&c.name===legacy[0]&&c.query===legacy[1]&&c.sort===legacy[2]);});seen.add('legacy-defaults-v1');
   }
+  rows=rows.filter(c=>!/^preset-[a-z0-9]+-(rule34|e621)-(gay|femboy)$/.test(c.id));seen.add('standard-pack-v2');
+  const signatureOf=c=>{const source=sources.find(s=>s.id===c.sourceId);return source?c.sourceId+'|'+searchTags(source,parseTags(c.query),c.sort).split(/\s+/).filter(Boolean).sort().join(' '):null;};
+  const queries=new Set(rows.filter(c=>!c.id.startsWith('preset-')).map(signatureOf).filter(Boolean));
+  rows=rows.slice().reverse().filter(c=>{if(!c.id.startsWith('preset-'))return true;const key=signatureOf(c);if(!key)return true;if(queries.has(key))return false;queries.add(key);return true;}).reverse();
   for(const source of sources)for(const preset of sourceCollectionPresets(source)){
     if(seen.has(preset.id))continue;
     const signature=c=>searchTags(source,parseTags(c.query),c.sort).split(/\s+/).filter(Boolean).sort().join(' ');
@@ -316,4 +320,17 @@ export function addCollectionPresets(collections,sources,applied=[]){
     if(rows.length<200){rows.push(preset);seen.add(preset.id);}
   }
   return {collections:rows,applied:[...seen]};
+}
+
+export function addDefaultSources(sources,applied=[]){
+  const seen=new Set(Array.isArray(applied)?applied.filter(x=>typeof x==='string'):[]),rows=[...sources];
+  const order=['rule34','safebooru','danbooru','gelbooru','e621'];
+  for(const id of order){if(rows.some(s=>sourceTemplate(s).id===id)){seen.add(id);continue;}if(!seen.has(id)){const preset=SOURCE_TEMPLATES.find(s=>s.id===id);rows.push({...preset,id:'builtin-'+id,userId:'',login:'',apiKey:''});seen.add(id);}}
+  if(!applied?.length)rows.sort((a,b)=>{const rank=s=>{const i=order.indexOf(sourceTemplate(s).id);return i<0?99:i;};return rank(a)-rank(b);});
+  return {sources:rows,applied:[...seen]};
+}
+export function sourceAuthWarning(source){
+  if(['rule34','gelbooru'].includes(sourceTemplate(source).id)&&(!source.userId||!source.apiKey))return 'Укажите User ID и API key';
+  if(source.kind!=='gelbooru'&&!!(source.login||source.userId)!==!!source.apiKey)return 'Укажите логин и API key вместе';
+  return '';
 }

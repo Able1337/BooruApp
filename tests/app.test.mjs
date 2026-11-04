@@ -35,7 +35,7 @@ test('tag collections preserve source, excluded tags and sorting and reopen the 
 });
 test('library export omits API keys and legacy favorites JSON still imports',async t=>{
  const app=await setup({storage:{'bp.source':legacy}});t.after(app.cleanup);const{$,memory}=app;
- $('exportSaved').click();const backup=JSON.parse(await app.files[0].text());assert.equal(backup.version,2);assert.ok(!JSON.stringify(backup).includes('private-test'));
+ $('exportSaved').click();const backup=JSON.parse(await app.files[0].text());assert.equal(backup.version,3);assert.ok(!JSON.stringify(backup).includes('private-test'));
  const valid={id:'1',key:'example#1',file:'https://example.org/f.jpg',preview:'https://example.org/p.jpg',tags:['city']};
  await $('importSaved').onchange({target:{files:[{size:500,text:async()=>JSON.stringify([valid,{...valid,key:'evil',file:'javascript:alert(1)'}])}],value:'fake'}});
  assert.equal(JSON.parse(memory.get('bp.saved')).length,1);
@@ -96,7 +96,23 @@ test('adding a booru adds its starter collections once and deleted presets stay 
  const app=await setup();t.after(app.cleanup);const{$,memory}=app;
  assert.equal(JSON.parse(memory.get('bp.collections')).length,3);
  $('addSource').click();$('sourceTemplates').children.find(n=>n.dataset.template==='e621').click();$('sourceForm').onsubmit({preventDefault(){}});
- let items=JSON.parse(memory.get('bp.collections'));const furry=items.filter(c=>c.sourceId===JSON.parse(memory.get('bp.activeId')));assert.deepEqual(furry.map(c=>c.name),['Trend','Top','Animated','Gay','Femboy']);
+ let items=JSON.parse(memory.get('bp.collections'));const furry=items.filter(c=>c.sourceId===JSON.parse(memory.get('bp.activeId')));assert.deepEqual(furry.map(c=>c.name),['Trend','Top','Animated','Hot']);
  const card=$('collectionCards').querySelectorAll('.collection-card').find(c=>c.dataset.collectionId===furry[3].id);card.querySelector('.card-edit').click();$('deleteCollection').click();
  $('sourceSelect').value=JSON.parse(memory.get('bp.activeId'));$('sourceSelect').onchange();items=JSON.parse(memory.get('bp.collections'));assert.ok(!items.some(c=>c.id===furry[3].id));
+});
+test('first launch has all five booru, credential warnings and only standard starter categories',async t=>{
+ const app=await setup({defaultSources:true});t.after(app.cleanup);const{$,memory}=app;
+ const rows=JSON.parse(memory.get('bp.sources'));assert.equal(rows.length,5);assert.equal($('sourceCards').querySelectorAll('.source-warning').length,2);
+ assert.ok(JSON.parse(memory.get('bp.collections')).every(c=>!['Gay','Femboy'].includes(c.name)));assert.ok(JSON.parse(memory.get('bp.collections')).some(c=>c.name==='Hot'));
+ $('sourceCards').querySelector('.source-warning').click();assert.equal($('sourceEditor').open,true);
+});
+test('full backups restore configured booru, keys and settings; missing keys preserve existing credentials and invalid files are atomic',async t=>{
+ const post={id:'1',key:'https://rule34.xxx/#1',source:'Rule34',file:'https://example.org/f.png',preview:'https://example.org/f.png',tags:['sky']};
+ const first=await setup({storage:{'bp.source':legacy,'bp.saved':[post],'bp.view':'grid','bp.sort':'score','bp.mediaRelay':{gelbooru:false,e621:true}}});first.$('exportKeys').checked=true;first.$('exportSaved').click();const backup=JSON.parse(await first.files[0].text());assert.equal(backup.sources[0].apiKey,'private-test');first.cleanup();
+ const app=await setup({defaultSources:true});t.after(app.cleanup);const{$,memory}=app;
+ const load=async data=>$('importSaved').onchange({target:{files:[{size:500,text:async()=>JSON.stringify(data)}],value:'backup.json'}});
+ await load(backup);let sources=JSON.parse(memory.get('bp.sources'));assert.equal(sources.filter(s=>s.base==='https://rule34.xxx/').length,1);assert.equal(sources.find(s=>s.id===backup.sources[0].id).apiKey,'private-test');assert.equal(sources.length,5);
+ assert.equal(JSON.parse(memory.get('bp.saved'))[0].id,'1');assert.equal(JSON.parse(memory.get('bp.view')),'grid');assert.equal(JSON.parse(memory.get('bp.sort')),'score');assert.equal(JSON.parse(memory.get('bp.mediaRelay')).gelbooru,false);
+ const noKeys=structuredClone(backup);delete noKeys.sources[0].apiKey;await load(noKeys);assert.equal(JSON.parse(memory.get('bp.sources')).find(s=>s.id===backup.sources[0].id).apiKey,'private-test');
+ const before=memory.get('bp.sources');await load({...backup,collections:{bad:true},sources:[{...backup.sources[0],apiKey:'must-not-apply'}]});assert.equal(memory.get('bp.sources'),before);assert.match($('notice').textContent,/Не удалось импортировать/);
 });
