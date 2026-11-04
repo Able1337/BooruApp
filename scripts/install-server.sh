@@ -108,7 +108,11 @@ for attempt in {1..15}; do
  if curl -fsS http://127.0.0.1:18737/healthz >/dev/null; then break; fi
  sleep 1
 done
-curl -fsS http://127.0.0.1:18737/healthz
+if ! curl -fsS http://127.0.0.1:18737/healthz; then
+ systemctl status booru-pocket --no-pager || true
+ journalctl -u booru-pocket -n 30 --no-pager || true
+ exit 1
+fi
 systemctl reload nginx
 # DNS A/AAAA must point here and inbound 80/443 must be allowed.
 certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email --redirect -d "$site_domain"

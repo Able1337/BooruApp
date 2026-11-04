@@ -1,5 +1,6 @@
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
+import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {isIP} from 'node:net';
@@ -81,7 +82,7 @@ export function createApp({upstream=fetch,publicOrigin=process.env.PUBLIC_ORIGIN
     }catch{return send(res,500,{error:'Ошибка сервера'});}
   };
 }
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+if(process.argv[1]&&realpathSync(process.argv[1])===fileURLToPath(import.meta.url)){
   const port=Number(process.env.PORT||8080);
   http.createServer({requestTimeout:15000,headersTimeout:10000},createApp()).listen(port,process.env.HOST||'127.0.0.1',()=>console.log(`Booru Pocket listening on ${port}`));
 }
