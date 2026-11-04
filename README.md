@@ -1,41 +1,47 @@
 # Booru Pocket
 
-## Browser hosting
+Сайт: **https://frank.eben-cord.ru/** — работает в Chrome без APK.
 
-The project is moving from GitHub Pages to `https://frank.eben-cord.ru/`. The new Node server serves the existing interface and forwards API requests through the same origin, so browser API requests do not depend on provider CORS. Media still loads directly from the source. See [server installation and verification](deploy/README.md). Android and static files remain available in source. Earlier Pages/build verification below describes the previous deployment.
+## Как работает
 
-Android API client with a shared static web interface. No media proxy, account service, analytics, or third-party runtime JavaScript dependencies. Browser hosting now includes a small API gateway.
+HTML/CSS/JavaScript интерфейс сохранён. Node-сервер без npm-зависимостей обслуживает страницу и передаёт запросы API через `POST /api/posts` на том же домене. Это снимает зависимость браузерных API-запросов от CORS источника. Картинки, GIF и видео загружаются непосредственно из источников.
 
-## Verified GitHub build (2026-11-04)
+Поддержаны Safebooru (по умолчанию), Rule34 и Danbooru. Сервер разрешает только запросы списка публикаций к этим API, ограничивает объём ответа, время ожидания, частоту и число параллельных запросов. Произвольные адреса и редиректы запрещены.
 
-Source is uploaded to `main`. [APK build and signature verification passed](https://github.com/Able1337/BooruApp/actions/runs/41845545330), including all 9 tests. [Download the APK artifact](https://github.com/Able1337/BooruApp/actions/runs/41845545330/artifacts/13332061051) and unpack the ZIP (artifact retention is 30 days). [Pages deployment passed](https://github.com/Able1337/BooruApp/actions/runs/41845303772); UI: https://able1337.github.io/BooruApp/.
+Избранное и настройки сохраняются в localStorage браузера. Ключ API передаётся серверу для запроса к источнику, но сервер не сохраняет его на диск и не пишет тела запросов в логи. Используйте только HTTPS. При переходе с APK или другого домена нужно заново задать источник и импортировать ранее экспортированное избранное.
 
-This APK uses a newly generated temporary development key, not the original v0.1 key. It cannot update the earlier installation, and a later Actions run will use another key until persistent signing secrets are configured. No private signing key was committed. Real Android/WebView execution, live API/media loading and device import/export remain untested. VALIDATION.md records the earlier local-only verification before GitHub access was restored; its repository/build/Pages blockers have now been resolved through Actions. SDK setup explicitly excludes the removed `tools` package.
+## Подключить Rule34
 
-## Version 0.1.1
+В настройках укажите адрес `https://rule34.xxx/` или `https://api.rule34.xxx/`, формат **Gelbooru / DAPI**, свои **User ID** и **API key** из раздела **API Access Credentials** аккаунта. Вставляйте только значения, без `api_key=`, `user_id=` и остальных частей URL. Адрес API выбирается автоматически. Ключи не коммитить и не передавать в issues.
 
-- Masonry feed, tag search, paginated loading, image/GIF/video viewer.
-- Local favorites, JSON import/export, keyboard navigation on desktop.
-- Configurable HTTPS source: Gelbooru/DAPI or Danbooru JSON format. The default is **Safebooru**, a safe-for-work source. Custom sources require their own compatible public API and may require credentials.
-- Android performs API GET requests using native HTTPS, so browser CORS restrictions do not apply to those API requests. Authentication, source availability, anti-hotlink rules, API limits, and terms still apply.
-- Bundled web UI works before hosting is configured. The native **Интерфейс** button switches to `https://able1337.github.io/BooruApp/`. If the hosted page fails to load, the app falls back to the bundled interface.
-- Ordinary browser use requires the source to permit CORS. There is no backend fallback or CORS proxy.
+## Проверено 2026-11-04
 
-The hosted interface and bundled interface have separate browser origins and therefore separate local storage. Use favorites export/import to transfer between them. API keys remain on the device but are accessible to the trusted interface; never add keys to the repository or use an untrusted hosted UI. Some APIs use a different authentication convention; the generic optional fields currently support DAPI `user_id` and `api_key` only.
+- HTTPS и `/healthz` на публичном домене отвечают.
+- Реальный запрос браузерного серверного API к Safebooru вернул список публикаций.
+- 16 автоматических тестов прошли локально, в Actions и на сервере, включая запуск через ссылку на текущую версию, POST API, запрет чужого Origin/произвольных адресов и сохранение ключа вне URL браузерного запроса.
+- Xray остановлен, его автозапуск и управляющая панель отключены, исполняемые файлы убраны из рабочих путей. Приватная резервная копия находится в `/root/booru-before-xray-removal/` на сервере.
+- Rule34 с пользовательским ключом и реальный просмотр на телефоне ещё не подтверждены.
 
-## Install
+GitHub Pages больше не используется. Workflow публикации Pages удалён. Полное снятие старой публикации выполняется через Settings → Pages → Unpublish site: GitHub API интеграции отказал в этом действии (403).
 
-Download `BooruPocket.apk` from a successful **Build APK** Actions run (artifact **BooruPocket-APK**, unpack the ZIP). Android 8.0 or newer, with an updated Android System WebView, is required. Allow installation from the browser/file manager used to open the APK.
+## Развёртывание
 
-This initial APK is development-signed. It was built and its signature verified; device/emulator runtime testing has not yet been completed. An APK from a different signing key cannot update an installed copy. Export favorites before uninstalling.
+См. [инструкцию сервера](deploy/README.md). Установка использует systemd, nginx и Certbot; приложение работает от отдельного пользователя `booru-pocket`, доступен только loopback-порт 18737. Публичный HTTPS использует 443. Автопродление сертификата включено.
 
-## GitHub Pages
+Ручной workflow **Deploy server** использует `BOORU_DEPLOY_PASSWORD` из Repository secrets. После разового развёртывания удалите этот временный секрет. Пароль сервера не входит в код, APK, архивы проекта или коммиты.
 
-In **Settings → Pages → Build and deployment → Source**, select **GitHub Actions**, then run **Publish web interface**. Expected URL:
+## Разработка
 
-`https://able1337.github.io/BooruApp/`
+```sh
+npm test
+npm start
+```
 
-Pages only serves the UI. API requests and media go directly from the device to the selected source. To use another repository, update `REMOTE` in `android/src/ru/able/boorupocket/MainActivity.java` before rebuilding.
+Node 18+ для сервера, Node 22 в CI. Для локального HTTP допускается отсутствие `PUBLIC_ORIGIN`; на сервере выставлено `PUBLIC_ORIGIN=https://frank.eben-cord.ru`.
+
+## Android (необязательный клиент)
+
+Исходная Java/WebView оболочка сохранена. Её API-запросы выполняются нативно. Браузерный сайт не требует установки приложения.
 
 ## Reproducible build steps
 
@@ -71,8 +77,5 @@ npm run serve
 
 Open `http://localhost:8080`. Browser API calls depend on source CORS. `npm test` checks pagination, tag/credential escaping, both JSON formats, unsafe and missing URL rejection, favorites validation, and a simulated native-port/viewer/favorites flow. See VALIDATION.md for the scope of verification.
 
-## Boundaries and security
 
-Only the exact bundled document and this repository's HTTPS Pages document receive the native message port. There is no global JavaScript interface. External navigation opens the system browser. Native requests are GET-only, omit browser cookies, restrict destinations to public HTTPS/443, validate redirects, bound concurrency, and cap response size at 4 MiB. Remote UI updates execute with this client capability: protect the repository and review updates.
-
-Favorites contain source metadata and media URLs, not downloaded media. No cross-device sync, account system, multi-source merged feed, background downloading, or offline media library is included in v0.1.
+APK из разных сборок без постоянного ключа подписаны разными ключами и не обновляют друг друга. Для обновления установленной v0.1 нужен оригинальный приватный ключ. Не коммитьте keystore.

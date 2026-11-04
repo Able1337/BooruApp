@@ -17,7 +17,7 @@ import org.json.*;
 
 public class MainActivity extends Activity {
     private static final String LOCAL="https://appassets.androidplatform.net/";
-    private static final String REMOTE="https://able1337.github.io/BooruApp/";
+    private static final String REMOTE="https://frank.eben-cord.ru/";
     private static final int FILE_PICK=10, EXPORT=11, MAX_BYTES=4*1024*1024;
     private WebView web;
     private WebMessagePort nativePort;
@@ -75,8 +75,8 @@ public class MainActivity extends Activity {
         web.loadUrl(getPreferences(0).getBoolean("remote",false)?REMOTE:LOCAL);
     }
     private boolean trusted(String url){return url!=null&&(url.equals(LOCAL)||url.equals(LOCAL+"index.html")||url.equals(REMOTE)||url.equals(REMOTE+"index.html"));}
-    private void chooseMode(){new AlertDialog.Builder(this).setTitle("Откуда загружать интерфейс?").setItems(new String[]{"Из APK — автономный интерфейс","GitHub Pages — обновления с сайта","Перезагрузить"},(d,which)->{if(which<2){getPreferences(0).edit().putBoolean("remote",which==1).apply();fallingBack=false;web.loadUrl(which==1?REMOTE:LOCAL);}else web.reload();}).show();}
-    private void fallback(){if(!fallingBack&&web.getUrl()!=null&&web.getUrl().startsWith(REMOTE)){fallingBack=true;web.post(()->{Toast.makeText(this,"GitHub Pages пока недоступен. Открываем встроенную версию.",Toast.LENGTH_LONG).show();web.loadUrl(LOCAL);});}}
+    private void chooseMode(){new AlertDialog.Builder(this).setTitle("Откуда загружать интерфейс?").setItems(new String[]{"Из APK — автономный интерфейс","Сайт — обновления интерфейса","Перезагрузить"},(d,which)->{if(which<2){getPreferences(0).edit().putBoolean("remote",which==1).apply();fallingBack=false;web.loadUrl(which==1?REMOTE:LOCAL);}else web.reload();}).show();}
+    private void fallback(){if(!fallingBack&&web.getUrl()!=null&&web.getUrl().startsWith(REMOTE)){fallingBack=true;web.post(()->{Toast.makeText(this,"Сайт пока недоступен. Открываем встроенную версию.",Toast.LENGTH_LONG).show();web.loadUrl(LOCAL);});}}
     private void openExternal(Uri uri){try{startActivity(new Intent(Intent.ACTION_VIEW,uri));}catch(ActivityNotFoundException e){Toast.makeText(this,"Не найден браузер",Toast.LENGTH_SHORT).show();}}
     private void attachPort(String url){
         if(nativePort!=null)nativePort.close();
