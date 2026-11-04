@@ -74,3 +74,11 @@ test('post tag clicks immediately include the tag and chips can then exclude it'
  first().click();await app.tick();assert.equal(new URL(JSON.parse(requests.at(-1).options.body).url).searchParams.get('tags'),'sky');assert.equal($('selectedTags').children.length,1);
  $('gridView').click();$('grid').querySelector('.view-label').click();$('tags').querySelector('.post-tags').children[0].click();await app.tick();assert.equal($('viewer').open,false);assert.equal(new URL(JSON.parse(requests.at(-1).options.body).url).searchParams.get('tags'),'sky');
 });
+test('saved posts have separate booru sections and only individual original posts can be shared',async t=>{
+ const media='https://example.org/a.jpg';const favorites=[{id:'1',key:'https://safebooru.org/#1',source:'Safebooru',file:media,preview:media,tags:['sky']},{id:'2',key:'https://e621.net/#2',source:'e621',file:media,preview:media,tags:['sky']}];
+ const app=await setup({storage:{'bp.saved':favorites}});t.after(app.cleanup);const{$}=app;
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'navigator');let shared;Object.defineProperty(globalThis,'navigator',{configurable:true,value:{share:async payload=>{shared=payload;}}});t.after(()=>{if(previous)Object.defineProperty(globalThis,'navigator',previous);else delete globalThis.navigator;});
+ $('savedTab').click();assert.deepEqual($('grid').querySelectorAll('.saved-group').map(n=>n.dataset.booru),['safebooru','e621']);assert.equal($('shareSearch').hidden,true);
+ $('grid').querySelectorAll('.share-post')[1].click();await app.tick();assert.equal(shared.url,'https://e621.net/posts/2');assert.ok(!shared.url.includes('#saved'));
+ $('gridView').click();assert.equal($('grid').querySelectorAll('.posts-grid').length,2);
+});

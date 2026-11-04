@@ -1,4 +1,4 @@
-import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource,mediaUrl,encodeRoute,decodeRoute,routeHistoryMode} from './core.mjs';
+import {makeRequest,normalizePosts,httpsUrl,postRows,sanitizeFavorites,SOURCE_TEMPLATES,sourceTemplate,sanitizeSources,parseTags,tagsQuery,mergeTags,searchTags,sanitizeCollections,makeSuggestionsRequest,normalizeSuggestions,TAG_GROUPS,metaSuggestions,sortFromTag,parseTagPayload,groupCollectionsBySource,mediaUrl,encodeRoute,decodeRoute,routeHistoryMode,savedPostSource,groupSavedPosts,originalPostUrl} from './core.mjs';
 const $=id=>document.getElementById(id);
 const el=(tag,cls='',text='')=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text)n.textContent=text;return n;};
 const button=(text,cls,action)=>{const n=el('button',cls,text);n.type='button';n.onclick=action;return n;};
@@ -176,11 +176,11 @@ async function loadCollectionCover(job){
 function updateView(){
   syncRoute();
   if(tab==='home')clearFeedVideos();revealSearch();
-  $('homeView').hidden=tab!=='home';$('feedView').hidden=tab==='home';$('viewToggle').hidden=tab==='home';$('shareSearch').hidden=tab==='home';
+  $('homeView').hidden=tab!=='home';$('feedView').hidden=tab==='home';$('viewToggle').hidden=tab==='home';$('shareSearch').hidden=tab!=='feed';
   for(const [id,key]of [['homeTab','home'],['feedTab','feed'],['savedTab','saved']])$(id).classList.toggle('active',tab===key);
-  $('grid').className=view==='list'?'posts-list':'posts-grid';$('listView').setAttribute('aria-pressed',String(view==='list'));$('gridView').setAttribute('aria-pressed',String(view==='grid'));$('sort').value=sort;
+  $('grid').className=tab==='saved'?'saved-groups':view==='list'?'posts-list':'posts-grid';$('listView').setAttribute('aria-pressed',String(view==='list'));$('gridView').setAttribute('aria-pressed',String(view==='grid'));$('sort').value=sort;
   $('feedTitle').textContent=tab==='saved'?'Сохранённые посты':source().name;
-  $('feedSubtitle').textContent=tab==='saved'?'Локальная библиотека публикаций':[new URL(source().base).hostname,sort==='score'?'По оценке':sort==='random'?'Случайные посты':'Сначала новые'].join(' · ');
+  $('feedSubtitle').textContent=tab==='saved'?'Посты по booru':[new URL(source().base).hostname,sort==='score'?'По оценке':sort==='random'?'Случайные посты':'Сначала новые'].join(' · ');
 }
 function setActive(id,openFeed=false){
   if(!sources.some(s=>s.id===id))return;invalidateCollectionCovers();activeId=id;activeCollection=null;persistSources();hideSuggestions();renderHome();
@@ -255,18 +255,28 @@ function toggleFavorite(p){
   if(posts[current]?.key===p.key)$('savePost').textContent=isSaved(p)?'♥ Пост сохранён':'♡ Сохранить пост';
 }
 function renderPosts(items=posts,append=false){
-  if(!append){clearFeedVideos();$('grid').replaceChildren();}const fragment=document.createDocumentFragment();
+  if(!append){clearFeedVideos();$('grid').replaceChildren();}
+  if(tab==='saved'){
+    for(const group of groupSavedPosts(items)){
+      const section=el('section','saved-group');section.dataset.booru=group.source.id;
+      const heading=el('h2','saved-group-heading');heading.append(mark(group.source),el('span','',group.source.name),el('span','count',String(group.posts.length)));
+      const grid=el('div',view==='list'?'posts-list':'posts-grid');section.append(heading,grid);$('grid').append(section);renderPostCards(group.posts,grid);
+    }
+  }else renderPostCards(items,$('grid'));
+}
+function renderPostCards(items,target){
+  const fragment=document.createDocumentFragment();
   for(const p of items){
-    const card=el('article','post');const s=sources.find(x=>x.id===p.sourceId)||{name:p.source,base:p.page||p.file};
-    const head=el('div','post-head');head.append(mark(s),el('span','',p.source||source().name),el('span','post-id','#'+p.id));card.append(head);
+    const card=el('article','post');const s=sources.find(x=>x.id===p.sourceId)||savedPostSource(p);
+    const head=el('div','post-head');head.append(mark(s),el('span','',p.source||s.name),el('span','post-id','#'+p.id));card.append(head);
     let media;
     if(p.video&&view==='list'){media=el('div','post-media');const video=el('video');video.src=displayMedia(p.file);video.poster=displayMedia(p.preview);video.controls=true;video.playsInline=true;video.preload='none';media.append(video);feedVideoObserver.observe(video);}
     else {media=view==='grid'?button('','post-media',()=>openPost(posts.findIndex(x=>x.key===p.key))):el('div','post-media');if(view==='grid')media.setAttribute('aria-label','Открыть пост '+p.id);const image=el('img');image.src=displayMedia(view==='grid'?p.preview:(p.sample||p.file));image.alt=p.tags.slice(0,8).join(', ');image.loading='lazy';image.decoding='async';image.style.aspectRatio=p.width+'/'+p.height;const primary=view==='grid'?p.preview:(p.sample||p.file);let fallback=false;image.onerror=()=>{if(!fallback&&primary!==p.preview){fallback=true;image.src=displayMedia(p.preview);}else image.alt='Медиа недоступно — откройте оригинал';};media.append(image);if(p.video)media.append(el('span','video-badge','▶ VIDEO'));}
     card.append(media);const footer=el('div','post-footer');const save=button(isSaved(p)?'♥':'♡',isSaved(p)?'saved':'',()=>toggleFavorite(p));save.dataset.favoriteKey=p.key;save.setAttribute('aria-label',isSaved(p)?'Убрать из сохранённых':'Сохранить пост');let open;if(view==='grid')open=button('Открыть','view-label',()=>openPost(posts.findIndex(x=>x.key===p.key)));else{open=el('a','post-original','Оригинал ↗');open.href=displayMedia(p.file);open.target='_blank';open.rel='noopener noreferrer';}
-    footer.append(save,open,el('span','post-score','↑ '+p.score));card.append(footer);
+    const share=button('↗','share-post',()=>sharePost(p));share.setAttribute('aria-label','Поделиться постом '+p.id);share.title='Поделиться ссылкой на оригинальный пост';footer.append(save,open,share,el('span','post-score','↑ '+p.score));card.append(footer);
     const details=el('details','inline-tags');details.append(el('summary','','Теги · '+p.tags.length));const tags=el('div','grouped-tags');renderGroupedTags(tags,p,addPostTag);details.append(tags);card.append(details);fragment.append(card);
   }
-  $('grid').append(fragment);
+  target.append(fragment);
 }
 function renderGroupedTags(container,p,action){
   const groups=p.tagGroups&&typeof p.tagGroups==='object'?p.tagGroups:{general:p.tags};
@@ -349,5 +359,10 @@ $('newCollection').onclick=()=>openCollection();$('saveCollection').onclick=()=>
 $('settingsOpen').onclick=()=>{renderManage();$('settings').showModal();};$('settingsClose').onclick=()=>closeDialog('settings');
 $('closeViewer').onclick=closeViewer;$('viewer').onclose=pauseMedia;$('previous').onclick=()=>openPost(current-1);$('next').onclick=()=>openPost(current+1);$('savePost').onclick=()=>{if(posts[current])toggleFavorite(posts[current]);};
 document.addEventListener('keydown',e=>{if($('viewer').open){if(e.key==='ArrowLeft')openPost(current-1);if(e.key==='ArrowRight')openPost(current+1);}});
-$('shareSearch').onclick=async()=>{const url=new URL(routeFor(),window.location.href).href;try{if(navigator.share)await navigator.share({title:'Booru Pocket',url});else if(navigator.clipboard){await navigator.clipboard.writeText(url);showNotice('Ссылка на поиск скопирована.');}else showNotice('Ссылка на поиск: '+url);}catch(error){if(error.name!=='AbortError')showNotice('Ссылка на поиск: '+url);}};
+async function shareLink(url,title='Booru Pocket'){
+  try{if(navigator.share)await navigator.share({title,url});else if(navigator.clipboard){await navigator.clipboard.writeText(url);showNotice('Ссылка скопирована.');}else showNotice('Ссылка: '+url);}catch(error){if(error.name!=='AbortError')showNotice('Ссылка: '+url);}
+}
+function sharePost(post){const url=originalPostUrl(post);if(!url){showNotice('У поста нет ссылки на оригинал.');return;}return shareLink(url,(post.source||'Booru')+' · #'+post.id);}
+$('shareSearch').onclick=()=>shareLink(new URL(routeFor(),window.location.href).href,$('feedTitle').textContent);
+$('sharePost').onclick=()=>{if(posts[current])sharePost(posts[current]);};
 count();persistSources();renderHome();renderTags();initNavigation();

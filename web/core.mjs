@@ -241,3 +241,23 @@ export function routeHistoryMode(previous,next){
   const a=decodeRoute(previous),b=decodeRoute(next);
   return ['page','booru','tags','sort','collection'].some(key=>a[key]!==b[key])?'pushState':'replaceState';
 }
+
+export function savedPostSource(post){
+  const base=httpsUrl(typeof post.key==='string'?post.key.split('#')[0]:'')||httpsUrl(post.page);
+  const preset=base?sourceTemplate({base}):null;
+  const known=SOURCE_TEMPLATES.find(t=>t.id===preset?.id);
+  if(known)return {...known};
+  const host=base?new URL(base).hostname:'unknown';
+  return {id:host,name:post.source||host,base:base||'',kind:'gelbooru'};
+}
+export function groupSavedPosts(posts){
+  const groups=new Map();
+  for(const post of posts){const source=savedPostSource(post);if(!groups.has(source.id))groups.set(source.id,{source,posts:[]});groups.get(source.id).posts.push(post);}
+  return [...groups.values()];
+}
+export function originalPostUrl(post){
+  const source=savedPostSource(post);
+  if(!/^\d{1,20}$/.test(String(post.id))||!httpsUrl(source.base))return '';
+  const base=source.id==='rule34'?'https://rule34.xxx/':source.base;
+  return ['danbooru','e621'].includes(source.kind)?new URL('posts/'+post.id,base).href:new URL('index.php?page=post&s=view&id='+post.id,base).href;
+}

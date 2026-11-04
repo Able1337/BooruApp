@@ -9,3 +9,5 @@
 .search-panel{transition:transform .2s ease}.search-panel.scroll-hidden{transform:translateY(calc(-100% - 2px));pointer-events:none}
 
 .feed-actions{display:flex;align-items:center;gap:10px}.source-card-main,.collection-card-main{color:inherit}.post-tags a{display:inline-block}
+
+.saved-groups{display:flex;flex-direction:column;gap:30px}.saved-group-heading{display:flex;align-items:center;gap:9px;font-size:18px;margin-bottom:15px}.share-post{font-size:16px!important}@media(max-width:600px){.saved-group-heading{font-size:16px}}

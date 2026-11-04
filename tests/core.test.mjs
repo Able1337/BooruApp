@@ -127,3 +127,12 @@ test('search changes push history while layout-only changes replace the current 
  assert.equal(routeHistoryMode(search,encodeRoute({page:'feed',booru:'gelbooru',tags:'sky',view:'grid'})),'replaceState');
  assert.equal(routeHistoryMode(search,search),'replaceState');
 });
+test('saved posts group by provider even when local source IDs change or Rule34 uses its API hostname',async()=>{
+ const {groupSavedPosts,originalPostUrl}=await import('../web/core.mjs');
+ const posts=[{id:'1',key:'https://rule34.xxx/#1',sourceId:'old'},{id:'2',key:'https://api.rule34.xxx/#2',sourceId:'new'},{id:'3',key:'https://e621.net/#3'}];
+ const groups=groupSavedPosts(posts);assert.deepEqual(groups.map(g=>[g.source.id,g.posts.length]),[['rule34',2],['e621',1]]);
+ assert.equal(originalPostUrl(posts[1]),'https://rule34.xxx/index.php?page=post&s=view&id=2');assert.equal(originalPostUrl(posts[2]),'https://e621.net/posts/3');
+ assert.equal(originalPostUrl({id:'4',key:'https://gelbooru.com/?api_key=private#4'}),'https://gelbooru.com/index.php?page=post&s=view&id=4');
+ assert.equal(originalPostUrl({id:'5',key:'https://danbooru.donmai.us/#5'}),'https://danbooru.donmai.us/posts/5');
+ assert.equal(originalPostUrl({id:'x',key:'https://rule34.xxx/#x',page:'javascript:alert(1)'}),'');
+});
