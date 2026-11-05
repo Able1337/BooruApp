@@ -63,7 +63,7 @@ function isSaved(p){return saved.some(x=>x.key===p.key);}
 window.addEventListener('message',event=>{
   if(event.data!=='booru-native-v1'||!event.ports?.[0]||port)return;
   port=event.ports[0];port.onmessage=message=>{let r;try{r=JSON.parse(message.data);}catch{return;}const p=pending.get(r.id);if(!p)return;clearTimeout(p.timer);pending.delete(r.id);if(r.error)p.reject(new Error(r.error));else try{p.resolve(p.kind==='tags'?parseTagPayload(r.body):JSON.parse(r.body));}catch{p.reject(new Error('Ответ API не является JSON'));}};
-  $('mode').textContent='ANDROID';if(tab==='feed')reload();
+  $('mode').textContent='ANDROID';updateInstallButton();if(tab==='feed')reload();
 });
 function nativeGet(url,kind){return new Promise((resolve,reject)=>{const id=String(++serial);const timer=setTimeout(()=>{pending.delete(id);reject(new Error('Время ожидания API истекло'));},35000);pending.set(id,{resolve,reject,timer,kind});try{port.postMessage(JSON.stringify({id,url}));}catch{clearTimeout(timer);pending.delete(id);reject(new Error('Соединение с Android потеряно. Перезагрузите интерфейс.'));}});}
 async function get(url,kind='posts'){
@@ -412,3 +412,19 @@ function sharePost(post){const url=originalPostUrl(post);if(!url){showNotice('У
 $('shareSearch').onclick=()=>shareLink(new URL(routeFor(),window.location.href).href,$('feedTitle').textContent);
 $('sharePost').onclick=()=>{if(viewerItems[current])sharePost(viewerItems[current]);};
 count();persistSources();renderHome();renderTags();initNavigation();
+
+let installPrompt=null;
+function updateInstallButton(){
+  const standalone=window.matchMedia?.('(display-mode: standalone)').matches||navigator.standalone;
+  $('installApp').hidden=!serverApi||!!port||!window.isSecureContext||!!standalone;
+}
+if(serverApi&&typeof navigator!=='undefined'){
+  updateInstallButton();
+  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;updateInstallButton();});
+  window.addEventListener('appinstalled',()=>{installPrompt=null;$('installApp').hidden=true;$('installHint').hidden=true;});
+  if('serviceWorker' in navigator&&window.isSecureContext)navigator.serviceWorker.register('/sw.js',{scope:'/',updateViaCache:'none'}).catch(()=>{ $('installHint').textContent='Не удалось подготовить установку. Обновите страницу при доступном интернете.';$('installHint').hidden=false; });
+}
+$('installApp').onclick=async()=>{
+  if(installPrompt){const prompt=installPrompt;installPrompt=null;try{await prompt.prompt();await prompt.userChoice;}catch{}return;}
+  $('installHint').textContent='В Chrome откройте меню ⋮ → «Добавить на главный экран» → «Установить». На iPhone: Safari → «Поделиться» → «На экран Домой». Если установка ещё недоступна, обновите страницу онлайн.';$('installHint').hidden=false;
+};

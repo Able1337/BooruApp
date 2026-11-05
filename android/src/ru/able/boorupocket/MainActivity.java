@@ -47,8 +47,8 @@ public class MainActivity extends Activity {
                 Uri u=request.getUrl();
                 if(!"appassets.androidplatform.net".equals(u.getHost()))return null;
                 String path=u.getPath();String file=path==null||path.equals("/")?"index.html":path.substring(1);
-                if(!Arrays.asList("index.html","app.mjs","core.mjs","style.css").contains(file))return new WebResourceResponse("text/plain","UTF-8",404,"Not Found",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
-                try{String mime=file.endsWith(".mjs")?"text/javascript":file.endsWith(".css")?"text/css":"text/html";return new WebResourceResponse(mime,"UTF-8",getAssets().open("web/"+file));}catch(IOException e){return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[0]));}
+                if(!Arrays.asList("index.html","app.mjs","core.mjs","style.css","manifest.webmanifest","sw.js","icons/icon-192.png","icons/icon-512.png","icons/icon-180.png").contains(file))return new WebResourceResponse("text/plain","UTF-8",404,"Not Found",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
+                try{String mime=file.endsWith(".png")?"image/png":file.endsWith(".webmanifest")?"application/manifest+json":(file.endsWith(".mjs")||file.endsWith(".js"))?"text/javascript":file.endsWith(".css")?"text/css":"text/html";return new WebResourceResponse(mime,"UTF-8",getAssets().open("web/"+file));}catch(IOException e){return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[0]));}
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
                 String url=request.getUrl().toString();

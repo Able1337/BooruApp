@@ -54,7 +54,7 @@ export function checkedTarget(value,operation='posts') {
 }
 function send(res,status,body,type='application/json; charset=utf-8') {
   res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"frame-ancestors 'none'"});
-  res.end(typeof body==='string'?body:JSON.stringify(body));
+  res.end(typeof body==='string'||Buffer.isBuffer(body)?body:JSON.stringify(body));
 }
 async function readBody(req){let length=0;const parts=[];for await(const part of req){length+=part.length;if(length>MAX_BODY)throw new Error('body');parts.push(part);}return JSON.parse(Buffer.concat(parts).toString('utf8'));}
 export function createApp({upstream=fetch,publicOrigin=process.env.PUBLIC_ORIGIN||'',additionalOrigins=(process.env.ADDITIONAL_ORIGINS||'').split(',').filter(Boolean)}={}) {
@@ -106,11 +106,11 @@ export function createApp({upstream=fetch,publicOrigin=process.env.PUBLIC_ORIGIN
         finally{active--;}
       }
       if(req.method!=='GET'&&req.method!=='HEAD')return send(res,405,{error:'Метод не поддерживается'});
-      const files={'/':['index.html','text/html; charset=utf-8'],'/index.html':['index.html','text/html; charset=utf-8'],'/app.mjs':['app.mjs','text/javascript; charset=utf-8'],'/core.mjs':['core.mjs','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
+      const files={'/sw.js':['sw.js','text/javascript; charset=utf-8'],'/manifest.webmanifest':['manifest.webmanifest','application/manifest+json; charset=utf-8'],'/icons/icon-192.png':['icons/icon-192.png','image/png'],'/icons/icon-512.png':['icons/icon-512.png','image/png'],'/icons/icon-180.png':['icons/icon-180.png','image/png'],'/':['index.html','text/html; charset=utf-8'],'/index.html':['index.html','text/html; charset=utf-8'],'/app.mjs':['app.mjs','text/javascript; charset=utf-8'],'/core.mjs':['core.mjs','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
       const entry=files[req.url?.split('?')[0]];
       if(!entry)return send(res,404,{error:'Страница не найдена'});
-      let content=await readFile(resolve(ROOT,entry[0]),'utf8');
-      if(entry[0]==='index.html')content=content.replace('<head>','<head><meta name="booru-api" content="same-origin">');
+      let content=await readFile(resolve(ROOT,entry[0]));
+      if(entry[0]==='index.html')content=content.toString('utf8').replace('<head>','<head><meta name="booru-api" content="same-origin">');
       return send(res,200,req.method==='HEAD'?'':content,entry[1]);
     }catch{return send(res,500,{error:'Ошибка сервера'});}
   };

@@ -43,3 +43,9 @@ test('tag route and e621 authentication use bounded server requests without putt
  const response=await fetch(base+'/api/tags',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://frank.eben-grad.ru'},body:JSON.stringify({url:'https://e621.net/tags/autocomplete.json?search[name_matches]=sky&limit=10&login=me&api_key=private-test'})});
  assert.equal(response.status,200);assert.ok(!called.url.includes('private-test'));assert.ok(!called.url.includes('login='));assert.equal(called.options.headers.Authorization,'Basic '+Buffer.from('me:private-test').toString('base64'));
 });
+test('PWA manifest, service worker and real PNG icons are served with correct types',async t=>{
+ const server=http.createServer(createApp());server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>server.close());const base=`http://127.0.0.1:${server.address().port}`;
+ const response=await fetch(base+'/manifest.webmanifest');assert.match(response.headers.get('content-type'),/application\/manifest\+json/);const manifest=await response.json();assert.equal(manifest.display,'standalone');assert.equal(manifest.scope,'/');assert.equal(manifest.icons.length,2);
+ for(const icon of manifest.icons){const r=await fetch(base+icon.src);assert.equal(r.status,200);assert.equal(r.headers.get('content-type'),'image/png');const bytes=Buffer.from(await r.arrayBuffer());assert.equal(bytes.subarray(0,8).toString('hex'),'89504e470d0a1a0a');assert.equal(bytes.readUInt32BE(16),Number(icon.sizes.split('x')[0]));}
+ const sw=await fetch(base+'/sw.js');assert.equal(sw.status,200);assert.match(sw.headers.get('content-type'),/javascript/);assert.equal(sw.headers.get('cache-control'),'no-store');
+});

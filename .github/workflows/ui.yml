@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['web/**', 'server/**', 'tests/**', 'scripts/ui-smoke.mjs', '.github/workflows/ui.yml']
+    paths: ['web/**', 'server/**', 'tests/**', 'scripts/ui-smoke.mjs', 'scripts/pwa-smoke.mjs', '.github/workflows/ui.yml']
   pull_request:
-    paths: ['web/**', 'server/**', 'tests/**', 'scripts/ui-smoke.mjs']
+    paths: ['web/**', 'server/**', 'tests/**', 'scripts/ui-smoke.mjs', 'scripts/pwa-smoke.mjs']
 permissions:
   contents: read
 concurrency:
@@ -28,7 +28,9 @@ jobs:
       - name: Exercise desktop and mobile UI
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/booru-ui/node_modules/playwright/index.mjs
-        run: node scripts/ui-smoke.mjs
+        run: |
+          node scripts/ui-smoke.mjs
+          node scripts/pwa-smoke.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
