@@ -33,9 +33,9 @@ test('tag collections preserve source, excluded tags and sorting and reopen the 
  const target=new URL(JSON.parse(app.requests.at(-1).options.body).url);assert.match(target.searchParams.get('tags'),/landscape -city sort:score:desc/);
  assert.equal($('selectedTags').children.length,2);assert.equal($('homeView').hidden,true);assert.equal($('feedView').hidden,false);
 });
-test('library export omits API keys and legacy favorites JSON still imports',async t=>{
+test('library export can omit API keys and legacy favorites JSON still imports',async t=>{
  const app=await setup({storage:{'bp.source':legacy}});t.after(app.cleanup);const{$,memory}=app;
- $('exportSaved').click();const backup=JSON.parse(await app.files[0].text());assert.equal(backup.version,3);assert.ok(!JSON.stringify(backup).includes('private-test'));
+ $('exportKeys').checked=false;$('exportSaved').click();const backup=JSON.parse(await app.files[0].text());assert.equal(backup.version,3);assert.ok(!JSON.stringify(backup).includes('private-test'));
  const valid={id:'1',key:'example#1',file:'https://example.org/f.jpg',preview:'https://example.org/p.jpg',tags:['city']};
  await $('importSaved').onchange({target:{files:[{size:500,text:async()=>JSON.stringify([valid,{...valid,key:'evil',file:'javascript:alert(1)'}])}],value:'fake'}});
  assert.equal(JSON.parse(memory.get('bp.saved')).length,1);
@@ -115,4 +115,12 @@ test('full backups restore configured booru, keys and settings; missing keys pre
  assert.equal(JSON.parse(memory.get('bp.saved'))[0].id,'1');assert.equal(JSON.parse(memory.get('bp.view')),'grid');assert.equal(JSON.parse(memory.get('bp.sort')),'score');assert.equal(JSON.parse(memory.get('bp.mediaRelay')).gelbooru,false);
  const noKeys=structuredClone(backup);delete noKeys.sources[0].apiKey;await load(noKeys);assert.equal(JSON.parse(memory.get('bp.sources')).find(s=>s.id===backup.sources[0].id).apiKey,'private-test');
  const before=memory.get('bp.sources');await load({...backup,collections:{bad:true},sources:[{...backup.sources[0],apiKey:'must-not-apply'}]});assert.equal(memory.get('bp.sources'),before);assert.match($('notice').textContent,/Не удалось импортировать/);
+});
+test('keys export by default and import accepts API field aliases without erasing credentials from older backups',async t=>{
+ const app=await setup({storage:{'bp.source':legacy}});t.after(app.cleanup);const{$,memory}=app;
+ assert.equal($('exportKeys').checked,true);$('exportSaved').click();const backup=JSON.parse(await app.files[0].text());assert.equal(backup.sources[0].apiKey,'private-test');
+ const load=async data=>$('importSaved').onchange({target:{files:[{size:300,text:async()=>JSON.stringify(data)}],value:'backup.json'}});
+ const s={...backup.sources[0],api_key:'restored-test-key',user_id:'456'};delete s.apiKey;delete s.userId;
+ await load({version:2,sources:[s],saved:[]});let restored=JSON.parse(memory.get('bp.sources')).find(x=>x.id===s.id);assert.equal(restored.apiKey,'restored-test-key');assert.equal(restored.userId,'456');assert.match($('notice').textContent,/восстановлено: 1/);assert.ok(!$('notice').textContent.includes('restored-test-key'));
+ await load({source:{...s,api_key:''},saved:[]});restored=JSON.parse(memory.get('bp.sources')).find(x=>x.id===s.id);assert.equal(restored.apiKey,'restored-test-key');assert.match($('notice').textContent,/ключей в файле нет/);
 });

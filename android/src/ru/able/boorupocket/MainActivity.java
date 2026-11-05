@@ -27,16 +27,18 @@ public class MainActivity extends Activity {
     private String pendingExport;
     private boolean fallingBack=false;
 
+    private int dp(float value){return Math.round(value*getResources().getDisplayMetrics().density);}
+
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setStatusBarColor(Color.rgb(18,16,22));
         getWindow().setNavigationBarColor(Color.rgb(18,16,22));
         LinearLayout layout=new LinearLayout(this);layout.setOrientation(LinearLayout.VERTICAL);layout.setBackgroundColor(Color.rgb(18,16,22));
         layout.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets.consumeSystemWindowInsets();});
-        LinearLayout toolbar=new LinearLayout(this);toolbar.setGravity(Gravity.CENTER_VERTICAL);
-        TextView label=new TextView(this);label.setText("Booru Pocket");label.setTextColor(Color.rgb(214,181,250));label.setTextSize(14);label.setPadding(24,8,8,8);toolbar.addView(label,new LinearLayout.LayoutParams(0,48,1));
-        Button mode=new Button(this);mode.setText("Интерфейс");mode.setTextSize(11);mode.setOnClickListener(v->chooseMode());toolbar.addView(mode);
-        layout.addView(toolbar);
+        LinearLayout toolbar=new LinearLayout(this);toolbar.setGravity(Gravity.CENTER_VERTICAL);toolbar.setMinimumHeight(dp(56));toolbar.setPadding(dp(8),0,dp(8),0);
+        TextView label=new TextView(this);label.setText("Booru Pocket");label.setTextColor(Color.rgb(214,181,250));label.setTextSize(14);label.setGravity(Gravity.CENTER_VERTICAL);label.setSingleLine(true);label.setEllipsize(android.text.TextUtils.TruncateAt.END);label.setPadding(dp(8),dp(8),dp(8),dp(8));toolbar.addView(label,new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.WRAP_CONTENT,1));
+        Button mode=new Button(this);mode.setText("Интерфейс");mode.setTextSize(12);mode.setMinHeight(dp(48));mode.setPadding(dp(12),dp(8),dp(12),dp(8));mode.setOnClickListener(v->chooseMode());toolbar.addView(mode);
+        layout.addView(toolbar,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,LinearLayout.LayoutParams.WRAP_CONTENT));
         web=new WebView(this);web.setBackgroundColor(Color.rgb(18,16,22));
         WebSettings settings=web.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -118,7 +120,7 @@ public class MainActivity extends Activity {
     private void exportJson(String body){if(pendingExport!=null){Toast.makeText(this,"Сначала заверши текущее сохранение",Toast.LENGTH_SHORT).show();return;}if(body.getBytes(StandardCharsets.UTF_8).length>20*1024*1024){Toast.makeText(this,"Файл больше 20 МБ",Toast.LENGTH_LONG).show();return;}pendingExport=body;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("application/json");i.putExtra(Intent.EXTRA_TITLE,"booru-pocket-library.json");try{startActivityForResult(i,EXPORT);}catch(ActivityNotFoundException e){pendingExport=null;}}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
         if(request==FILE_PICK&&fileCallback!=null){fileCallback.onReceiveValue(result==RESULT_OK&&data!=null&&data.getData()!=null?new Uri[]{data.getData()}:null);fileCallback=null;}
-        if(request==EXPORT){String content=pendingExport;pendingExport=null;if(result==RESULT_OK&&data!=null&&data.getData()!=null&&content!=null){try(OutputStream out=getContentResolver().openOutputStream(data.getData())){out.write(content.getBytes(StandardCharsets.UTF_8));Toast.makeText(this,"Избранное сохранено",Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,"Не удалось сохранить файл",Toast.LENGTH_LONG).show();}}}
+        if(request==EXPORT){String content=pendingExport;pendingExport=null;if(result==RESULT_OK&&data!=null&&data.getData()!=null&&content!=null){try(OutputStream out=getContentResolver().openOutputStream(data.getData())){out.write(content.getBytes(StandardCharsets.UTF_8));Toast.makeText(this,"Библиотека сохранена",Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,"Не удалось сохранить файл",Toast.LENGTH_LONG).show();}}}
     }
     @Override public void onBackPressed(){web.evaluateJavascript("(()=>{const d=document.querySelector('dialog[open]');if(d){d.close();return true;}if(location.hash.startsWith('#feed')||location.hash.startsWith('#saved')){history.back();return true;}return false;})()",value->{if(!"true".equals(value))new AlertDialog.Builder(this).setMessage("Закрыть приложение?").setPositiveButton("Закрыть",(d,w)->finish()).setNegativeButton("Отмена",null).show();});}
     @Override protected void onDestroy(){session++;workers.shutdownNow();if(nativePort!=null)nativePort.close();if(fileCallback!=null)fileCallback.onReceiveValue(null);web.destroy();super.onDestroy();}

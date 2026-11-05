@@ -19,7 +19,7 @@ class Element {
 }
 export async function setup({storage={},server=false,defaultSources=false,fetcher=async()=>({ok:true,json:async()=>[]})}={}){
  const ids=new Map();const html=readFileSync(new URL('../web/index.html',import.meta.url),'utf8');
- for(const match of html.matchAll(/<([a-z][a-z0-9]*)\b([^>]*\bid="([^"]+)"[^>]*)>/g)){const n=new Element(match[1]);n.id=match[3];n.hidden=/\bhidden\b/.test(match[2]);ids.set(n.id,n);}
+ for(const match of html.matchAll(/<([a-z][a-z0-9]*)\b([^>]*\bid="([^"]+)"[^>]*)>/g)){const n=new Element(match[1]);n.id=match[3];n.hidden=/\bhidden\b/.test(match[2]);n.checked=/\bchecked\b/.test(match[2]);ids.set(n.id,n);}
  const $=id=>{if(!ids.has(id))throw new Error('Missing HTML id: '+id);return ids.get(id);};
  globalThis.document={getElementById:$,querySelector:selector=>selector.startsWith('meta[')&&server?{content:'same-origin'}:null,querySelectorAll:selector=>{const nodes=[];for(const root of ids.values()){if(root.matches(selector))nodes.push(root);nodes.push(...root.querySelectorAll(selector));}return[...new Set(nodes)];},createElement:tag=>new Element(tag),createDocumentFragment:()=>new Element('#fragment'),addEventListener(){}};
  if(!defaultSources&&!Object.hasOwn(storage,'bp.sourceDefaults'))storage={...storage,'bp.sourceDefaults':SOURCE_TEMPLATES.map(s=>s.id)};

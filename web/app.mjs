@@ -355,26 +355,28 @@ function applyCollection(c){
   selected=parseTags(c.query);sort=c.sort;persist('bp.sort',sort);$('query').value='';activeCollection=c.id;tab='feed';reload();window.scrollTo?.({top:0,behavior:'smooth'});
 }
 function renderManage(){ $('manageSources').replaceChildren();for(const s of sources){const n=button('','manage-row',()=>openSource(s.id));const text=el('span');text.append(el('strong','',s.name),el('small','',sourceAuthWarning(s)||new URL(s.base).hostname));n.append(mark(s),text,el('span','edit-mark','✎'));$('manageSources').append(n);} }
+$('exportKeys').checked=read('bp.exportKeys',true)===true;
 $('exportSaved').onclick=()=>{
-  const includeKeys=$('exportKeys').checked;const data={version:3,sources:sources.map(s=>{const copy={...s};if(!includeKeys)delete copy.apiKey;return copy;}),collections,saved,activeId,view,sort,mediaRelay,collectionPresets:appliedCollectionPresets,sourceDefaults:appliedSourceDefaults,covers};const body=JSON.stringify(data,null,2);
+  const includeKeys=$('exportKeys').checked;persist('bp.exportKeys',includeKeys);const data={version:3,sources:sources.map(s=>{const copy={...s};if(!includeKeys)delete copy.apiKey;return copy;}),collections,saved,activeId,view,sort,mediaRelay,collectionPresets:appliedCollectionPresets,sourceDefaults:appliedSourceDefaults,covers};const body=JSON.stringify(data,null,2);
   if(port){port.postMessage(JSON.stringify({id:String(++serial),op:'export',body}));return;}
   const a=el('a');a.href=URL.createObjectURL(new Blob([body],{type:'application/json'}));a.download='booru-pocket-library.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 };
 $('importSaved').onchange=async e=>{
   try{
-    const file=e.target.files[0];if(!file)return;if(file.size>20*1024*1024)throw new Error('Файл больше 20 МБ');const data=JSON.parse(await file.text());
+    const file=e.target.files[0];if(!file)return;if(file.size>20*1024*1024)throw new Error('Файл больше 20 МБ');let data=JSON.parse(await file.text());if(data&&!Array.isArray(data)&&data.source&&!data.sources)data={...data,sources:[data.source]};
     const legacy=Array.isArray(data);if(!legacy&&(!data||typeof data!=='object'))throw new Error('Ожидается JSON библиотеки');
     const incoming=legacy?data:data.saved||[];if(!Array.isArray(incoming)||!legacy&&!['saved','sources','collections'].some(k=>Array.isArray(data[k])))throw new Error('Ожидается библиотека или массив публикаций');
-    const sourceAliases=new Map();
+    const sourceAliases=new Map();let restoredKeys=0;
     let nextSources=[...sources],nextCollections=collections,nextActive=activeId,nextView=view,nextSort=sort,nextRelay=mediaRelay,nextCovers={...covers},nextPresets=appliedCollectionPresets,nextDefaults=appliedSourceDefaults;
     const nextSaved=[...new Map([...saved,...sanitizeFavorites(incoming)].map(p=>[p.key,p])).values()];
     if(!legacy){
       if(data.sources!==undefined){
         if(!Array.isArray(data.sources)||data.sources.length>30)throw new Error('Недопустимый список booru');
-        for(const raw of data.sources){
-          if(!raw||typeof raw.name!=='string'||!httpsUrl(raw.base)||!['gelbooru','danbooru','e621'].includes(raw.kind)||Object.hasOwn(raw,'apiKey')&&(typeof raw.apiKey!=='string'||raw.apiKey.length>512))throw new Error('Недопустимые настройки booru');
+        for(const entry of data.sources){
+          const raw={...entry};if(!Object.hasOwn(raw,'apiKey')&&Object.hasOwn(raw,'api_key'))raw.apiKey=raw.api_key;if(!Object.hasOwn(raw,'userId')&&Object.hasOwn(raw,'user_id'))raw.userId=raw.user_id;if(!Object.hasOwn(raw,'login')&&Object.hasOwn(raw,'username'))raw.login=raw.username;
+          if(!entry||typeof raw.name!=='string'||!httpsUrl(raw.base)||!['gelbooru','danbooru','e621'].includes(raw.kind)||Object.hasOwn(raw,'apiKey')&&(typeof raw.apiKey!=='string'||raw.apiKey.length>512))throw new Error('Недопустимые настройки booru');
           const s=sanitizeSources([raw])[0];const existing=nextSources.find(x=>x.id===s.id);
-          if(!Object.hasOwn(raw,'apiKey')&&existing)s.apiKey=existing.apiKey||'';
+          if(typeof raw.apiKey==='string'&&raw.apiKey.trim()){s.apiKey=raw.apiKey.trim();restoredKeys++;}else if(existing)s.apiKey=existing.apiKey||'';
           const provider=sourceTemplate(s).id;const builtin=nextSources.find(x=>x.id!==s.id&&!data.sources.some(raw=>raw?.id===x.id)&&(x.id==='builtin-'+provider||x.id===provider)&&sourceTemplate(x).id===provider&&!x.apiKey);
           if(builtin){sourceAliases.set(builtin.id,s.id);nextSources=nextSources.filter(x=>x.id!==builtin.id);nextCollections=nextCollections.map(c=>c.sourceId===builtin.id?{...c,sourceId:s.id}:c);if(nextActive===builtin.id)nextActive=s.id;}
           nextSources=[...new Map([...nextSources,s].map(x=>[x.id,x])).values()];
@@ -390,7 +392,7 @@ $('importSaved').onchange=async e=>{
       if(Array.isArray(data.sourceDefaults))nextDefaults=[...new Set([...appliedSourceDefaults,...data.sourceDefaults.filter(x=>SOURCE_TEMPLATES.some(t=>t.id===x))])];
     }
     sources=nextSources;collections=nextCollections;saved=nextSaved;activeId=nextActive;view=nextView;sort=nextSort;mediaRelay=nextRelay;covers=nextCovers;appliedCollectionPresets=nextPresets;appliedSourceDefaults=nextDefaults;
-    invalidateCollectionCovers();persistSources();persist('bp.saved',saved);persist('bp.view',view);persist('bp.sort',sort);persist('bp.mediaRelay',mediaRelay);persist('bp.covers',covers);count();renderHome();closeDialog('settings');if(tab!=='home')reload();else updateView();showNotice('Библиотека импортирована: booru, коллекции, посты и настройки.');
+    invalidateCollectionCovers();persistSources();persist('bp.saved',saved);persist('bp.view',view);persist('bp.sort',sort);persist('bp.mediaRelay',mediaRelay);persist('bp.covers',covers);count();renderHome();closeDialog('settings');if(tab!=='home')reload();else updateView();showNotice(legacy?'Импортированы посты. Этот файл не содержит настроек booru и API-ключей.':'Библиотека импортирована: booru, коллекции, посты и настройки. '+(restoredKeys?'API-ключей восстановлено: '+restoredKeys+'.':'API-ключей в файле нет. Имеющиеся ключи сохранены; для переноса создайте новый экспорт с включёнными ключами.'));
   }catch(err){showNotice('Не удалось импортировать: '+err.message);}finally{e.target.value='';}
 };
 $('searchForm').onsubmit=e=>{e.preventDefault();runSearch();};$('clearQuery').onclick=()=>{selected=[];$('query').value='';renderTags();hideSuggestions();if(tab!=='home')reload();};
