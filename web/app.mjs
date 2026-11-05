@@ -415,7 +415,7 @@ count();persistSources();renderHome();renderTags();initNavigation();
 
 let installPrompt=null;
 function updateInstallButton(){
-  const standalone=window.matchMedia?.('(display-mode: standalone)').matches||navigator.standalone;
+  const standalone=window.matchMedia?.('(display-mode: standalone)').matches||(typeof navigator!=='undefined'&&navigator.standalone);
   $('installApp').hidden=!serverApi||!!port||!window.isSecureContext||!!standalone;
 }
 if(serverApi&&typeof navigator!=='undefined'){
