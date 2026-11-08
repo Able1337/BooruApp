@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['web/**', 'server/**', 'tests/**', 'scripts/ui-smoke.mjs', 'scripts/pwa-smoke.mjs', '.github/workflows/ui.yml']
+    paths: ['web/**', 'server/**', 'tests/**', 'scripts/ui-smoke.mjs', 'scripts/pwa-smoke.mjs', 'scripts/or-smoke.mjs', '.github/workflows/ui.yml']
   pull_request:
-    paths: ['web/**', 'server/**', 'tests/**', 'scripts/ui-smoke.mjs', 'scripts/pwa-smoke.mjs']
+    paths: ['web/**', 'server/**', 'tests/**', 'scripts/ui-smoke.mjs', 'scripts/pwa-smoke.mjs', 'scripts/or-smoke.mjs']
 permissions:
   contents: read
 concurrency:
@@ -31,6 +31,7 @@ jobs:
         run: |
           node scripts/ui-smoke.mjs
           node scripts/pwa-smoke.mjs
+          node scripts/or-smoke.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

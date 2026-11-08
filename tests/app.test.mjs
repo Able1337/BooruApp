@@ -124,3 +124,18 @@ test('keys export by default and import accepts API field aliases without erasin
  await load({version:2,sources:[s],saved:[]});let restored=JSON.parse(memory.get('bp.sources')).find(x=>x.id===s.id);assert.equal(restored.apiKey,'restored-test-key');assert.equal(restored.userId,'456');assert.match($('notice').textContent,/восстановлено: 1/);assert.ok(!$('notice').textContent.includes('restored-test-key'));
  await load({source:{...s,api_key:''},saved:[]});restored=JSON.parse(memory.get('bp.sources')).find(x=>x.id===s.id);assert.equal(restored.apiKey,'restored-test-key');assert.match($('notice').textContent,/ключей в файле нет/);
 });
+test('OR builder combines existing chips, searches a union, and saves the portable group in a collection',async t=>{
+ const rows=[{id:3,file_url:'https://example.org/3.png',tags:'animated cat'},{id:2,file_url:'https://example.org/2.png',tags:'animated dog'},{id:1,file_url:'https://example.org/1.png',tags:'animated cat dog'}];
+ const app=await setup({server:true,storage:{'bp.source':legacy},fetcher:async(url,options)=>{const tags=new URL(JSON.parse(options.body).url).searchParams.get('tags').split(/\s+/);return {ok:true,json:async()=>rows.filter(p=>tags.every(tag=>tag.startsWith('-')?!p.tags.split(' ').includes(tag.slice(1)):tag.includes(':')||p.tags.split(' ').includes(tag)))};}});t.after(app.cleanup);const{$}=app;
+ $('query').value='animated cat dog';$('searchForm').onsubmit({preventDefault(){}});await app.tick();$('orOpen').click();
+ $('orChoices').children.find(n=>n.textContent==='cat').click();$('orChoices').children.find(n=>n.textContent==='dog').click();$('orForm').onsubmit({preventDefault(){}});for(let i=0;i<8;i++)await app.tick();
+ assert.equal($('selectedTags').children.length,2);assert.equal($('selectedTags').querySelectorAll('.or-chip').length,1);assert.equal($('grid').querySelectorAll('.post').length,3);
+ $('saveCollection').click();$('collectionName').value='Either';$('collectionForm').onsubmit({preventDefault(){}});assert.equal(JSON.parse(app.memory.get('bp.collections'))[0].query,'animated {cat ~ dog}');
+ $('selectedTags').querySelector('.or-chip').querySelector('.exclude-toggle').click();for(let i=0;i<4;i++)await app.tick();assert.equal($('grid').querySelectorAll('.post').length,0);const query=new URL(JSON.parse(app.requests.at(-1).options.body).url).searchParams.get('tags');assert.equal(query,'animated -cat -dog');
+});
+test('saved posts respect included and excluded OR groups locally',async t=>{
+ const saved=['cat','dog','bird'].map((tag,i)=>({id:String(i),key:'https://safebooru.org/#'+i,file:'https://example.org/'+i+'.png',preview:'https://example.org/'+i+'.png',tags:['animated',tag]}));
+ const app=await setup({storage:{'bp.saved':saved}});t.after(app.cleanup);const{$}=app;
+ $('query').value='animated cat~dog';$('searchForm').onsubmit({preventDefault(){}});await app.tick();$('savedTab').click();assert.equal($('grid').querySelectorAll('.post').length,2);
+ const count=app.requests.length;$('selectedTags').querySelector('.or-chip').querySelector('.exclude-toggle').click();assert.equal($('grid').querySelectorAll('.post').length,1);assert.equal(app.requests.length,count);
+});

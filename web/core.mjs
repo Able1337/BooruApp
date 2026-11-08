@@ -87,13 +87,36 @@ export function sanitizeSources(data,legacy) {
   return result.length?result:[fallback];
 }
 function canonicalTag(value){return /^(score|sort|order|rating):/i.test(value)?value.toLowerCase():value;}
+export function orTag(values,excluded=false){
+  const any=[...new Set(values.map(v=>String(v).trim()).filter(Boolean))].sort();
+  return {value:'{'+any.join(' ~ ')+'}',excluded,any};
+}
 export function parseTags(query) {
-  const map=new Map();
-  for(const raw of String(query||'').trim().split(/\s+/).filter(Boolean).slice(0,80)){
-    const excluded=raw.startsWith('-'),value=canonicalTag((excluded?raw.slice(1):raw).slice(0,150));
-    if(value){if(/^(sort|order):/.test(value))for(const key of map.keys())if(/^(sort|order):/.test(key))map.delete(key);map.set(value,{value,excluded});}
+  const map=new Map(),optional=[];
+  for(const raw of (String(query||'').trim().match(/-?\{[^{}]*\}|[^\s]+/g)||[]).slice(0,80)){
+    const excluded=raw.startsWith('-'),value=canonicalTag((excluded?raw.slice(1):raw).slice(0,640));
+    if(!value)continue;
+    if(value.startsWith('~')&&value.length>1&&!excluded){optional.push(value.slice(1));continue;}
+    let tag;
+    if(value.startsWith('{')&&value.endsWith('}'))tag=orTag(value.slice(1,-1).split(/[~|\s]+/),excluded);
+    else if(/[~|]/.test(value)&&!value.startsWith('~'))tag=orTag(value.split(/[~|]+/),excluded);
+    else tag={value:value.slice(0,150),excluded};
+    if(/^(sort|order):/.test(tag.value))for(const key of map.keys())if(/^(sort|order):/.test(key))map.delete(key);
+    map.set(tag.value,tag);
   }
+  if(optional.length){const tag=orTag(optional);map.set(tag.value,tag);}
   return [...map.values()];
+}
+export function validateOrTags(tags){
+  if(tags.some(t=>!t.any&&/[{}~|]/.test(t.value)))throw new Error('Проверьте группу ИЛИ или используйте кнопку ИЛИ.');
+  const groups=tags.filter(t=>Array.isArray(t.any));
+  if(groups.filter(t=>!t.excluded).length>1)throw new Error('Можно использовать одну группу ИЛИ. Объедините варианты в одну группу.');
+  for(const group of groups)if(group.any.length<2||group.any.length>4||group.any.some(t=>!t||/[\s:{}~|]/.test(t)||t.startsWith('-')||t.length>150))throw new Error('Для ИЛИ нужны 2–4 обычных тега без метафильтров.');
+}
+export function matchesTags(post,tags){return tags.every(t=>{const match=t.any?t.any.some(value=>post.tags.includes(value)):post.tags.includes(t.value);return t.excluded?!match:match;});}
+export function orStrategy(source){return source.kind==='danbooru'||source.kind==='e621'?'tilde':sourceTemplate(source).id==='gelbooru'?'curly':'union';}
+function sourceTerms(source,tags){
+  return tags.map(t=>!t.any?(t.excluded?'-':'')+t.value:t.excluded?t.any.map(v=>'-'+v).join(' '):orStrategy(source)==='tilde'?t.any.map(v=>'~'+v).join(' '):'{'+t.any.join(' ~ ')+'}').join(' ');
 }
 export function tagsQuery(tags) { return tags.map(t=>(t.excluded?'-':'')+t.value).join(' '); }
 export function mergeTags(current, incoming) { const map=new Map(current.map(t=>[t.value,t]));for(const t of incoming){if(/^(sort|order):/.test(t.value))for(const key of map.keys())if(/^(sort|order):/.test(key))map.delete(key);map.set(t.value,t);}return [...map.values()].slice(0,80); }
@@ -110,7 +133,7 @@ export function searchTags(source,tags,sort='new') {
   const dapi=source.kind==='gelbooru';
   const values=dapi?{new:'',score:'sort:score:desc',score_asc:'sort:score:asc',random:'sort:random',old:'sort:id:asc'}:{new:'',score:'order:score',score_asc:'order:score_asc',random:'order:random',old:'order:id_asc'};
   const suffix=mode?values[mode]||'':explicit?(dapi?'sort:':'order:')+explicit.value.replace(/^(sort|order):/,''):'';
-  return [tagsQuery(query),suffix].filter(Boolean).join(' ');
+  return [sourceTerms(source,query),suffix].filter(Boolean).join(' ');
 }
 export function metaSuggestions(source,prefix) {
   prefix=prefix.toLowerCase();
@@ -333,4 +356,38 @@ export function sourceAuthWarning(source){
   if(['rule34','gelbooru'].includes(sourceTemplate(source).id)&&(!source.userId||!source.apiKey))return 'Укажите User ID и API key';
   if(source.kind!=='gelbooru'&&!!(source.login||source.userId)!==!!source.apiKey)return 'Укажите логин и API key вместе';
   return '';
+}
+
+
+// Native OR where supported, otherwise a bounded merge of ordinary tag queries.
+export function createSearchPager(source,tags,sort,read,{pageSize=30}={}){
+  validateOrTags(tags);
+  const group=tags.find(t=>t.any&&!t.excluded),union=group&&(orStrategy(source)==='union'||source.kind==='danbooru'&&tags.some(t=>!t.any&&!t.value.includes(':')));
+  const queries=union?group.any.map(value=>searchTags(source,tags.map(t=>t===group?{value,excluded:false}:t),sort)):[searchTags(source,tags,sort)];
+  let branches=queries.map(query=>({query,page:0,rows:[],done:false})),seen=new Set(),turn=0;
+  const explicit=tags.filter(t=>!t.excluded&&/^(sort|order):/.test(t.value)).at(-1);
+  const mode=explicit?sortFromTag(explicit.value):sort;
+  if(union&&explicit&&!mode)throw new Error('Для ИЛИ выберите сортировку: новые, старые, оценка или случайные.');
+  const compare=(a,b)=>{
+    if(mode==='score'||mode==='score_asc'){const delta=(a.score-b.score)*(mode==='score'?-1:1);if(delta)return delta;}
+    if(/^\d+$/.test(a.id)&&/^\d+$/.test(b.id)){const x=BigInt(a.id),y=BigInt(b.id);return x===y?0:(x<y?-1:1)*(mode==='old'?1:-1);}
+    return a.id.localeCompare(b.id)*(mode==='old'?1:-1);
+  };
+  return {async next(count=pageSize){
+    const snapshot=branches.map(b=>({...b,rows:[...b.rows]})),oldSeen=new Set(seen),oldTurn=turn;
+    try{
+      if(!union){const branch=branches[0];if(branch.done)return {items:[],done:true};const payload=await read(branch.query,branch.page,pageSize);const items=normalizePosts(payload,source);branch.page++;branch.done=postRows(payload).length<pageSize;return {items,done:branch.done};}
+      const items=[];let calls=0;
+      while(items.length<count){
+        const empty=branches.filter(b=>!b.rows.length&&!b.done);if(calls+empty.length>8)break;
+        calls+=empty.length;
+        for(let i=0;i<empty.length;i+=2)await Promise.all(empty.slice(i,i+2).map(async b=>{const payload=await read(b.query,b.page,pageSize);b.rows=normalizePosts(payload,source);b.page++;b.done=postRows(payload).length<pageSize;}));
+        const ready=branches.filter(b=>b.rows.length);
+        if(!ready.length){if(branches.every(b=>b.done))break;continue;}
+        const branch=mode==='random'?ready[turn++%ready.length]:ready.sort((a,b)=>compare(a.rows[0],b.rows[0]))[0];
+        const post=branch.rows.shift();if(seen.has(post.key))continue;seen.add(post.key);items.push(post);
+      }
+      return {items,done:branches.every(b=>b.done&&!b.rows.length)};
+    }catch(error){branches=snapshot;seen=oldSeen;turn=oldTurn;throw error;}
+  }};
 }
