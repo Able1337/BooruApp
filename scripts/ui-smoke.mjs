@@ -67,6 +67,7 @@ try{
  await page.evaluate(()=>scrollTo(0,0));await page.fill('#query','la');await page.locator('.suggestion').nth(1).waitFor();await page.screenshot({path:'build/ui/mobile-suggestions.png'});await page.press('#query','Escape');
  await page.fill('#query','video_smoke');await page.press('#query','Enter');await page.locator('#grid video').waitFor();
  await page.locator('#grid video').evaluate(async video=>{video.muted=true;await video.play();});await page.waitForFunction(()=>!document.querySelector('#grid video').paused);
+ await page.locator('#grid video').evaluate(video=>{video.currentTime=video.duration-0.2;});await page.waitForFunction(()=>{const video=document.querySelector('#grid video');return !video.paused&&video.currentTime<2;},{},{timeout:5000});
  await page.evaluate(()=>{const video=document.querySelector('#grid video');scrollBy(0,video.getBoundingClientRect().bottom+100);});await page.waitForFunction(()=>document.querySelector('#grid video').paused);
  await page.evaluate(()=>scrollTo(0,0));await page.waitForFunction(()=>document.getElementById('searchPanel').getBoundingClientRect().top>=0);assert.equal(await page.locator('#grid video').evaluate(video=>video.paused),true);
  await page.fill('#query','media_smoke');await page.press('#query','Enter');await page.waitForFunction(()=>document.querySelectorAll('#grid img').length===2&&[...document.querySelectorAll('#grid img')].every(img=>img.complete&&img.naturalWidth>0));
