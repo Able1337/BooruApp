@@ -2,7 +2,7 @@ name: Build APK
 on:
   push:
     branches: [main]
-    paths: ['android/**', 'scripts/build-apk.sh', '.github/workflows/build.yml']
+    paths: ['android/**', 'web/**', 'scripts/build-apk.sh', 'scripts/restore-android-signing.sh', '.github/workflows/build.yml']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -35,11 +35,18 @@ jobs:
             printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/booru.jks"
             echo "BOORU_KEYSTORE=$RUNNER_TEMP/booru.jks" >> "$GITHUB_ENV"
           fi
+      - name: Restore persistent server signing key when signing secrets are not configured
+        if: env.BOORU_KEYSTORE == ''
+        env:
+          SSHPASS: ${{ secrets.BOORU_DEPLOY_PASSWORD }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y sshpass
+          bash scripts/restore-android-signing.sh
       - name: Build and verify APK
         env:
-          BOORU_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          BOORU_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          BOORU_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          BOORU_KEY_ALIAS: ${{ env.BOORU_KEY_ALIAS || secrets.ANDROID_KEY_ALIAS }}
+          BOORU_KEYSTORE_PASSWORD: ${{ env.BOORU_KEYSTORE_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
+          BOORU_KEY_PASSWORD: ${{ env.BOORU_KEY_PASSWORD || secrets.ANDROID_KEY_PASSWORD }}
         run: bash scripts/build-apk.sh
       - uses: actions/upload-artifact@v4
         with:

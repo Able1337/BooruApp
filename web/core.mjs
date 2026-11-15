@@ -360,7 +360,7 @@ export function sourceAuthWarning(source){
 
 
 // Native OR where supported, otherwise a bounded merge of ordinary tag queries.
-export function createSearchPager(source,tags,sort,read,{pageSize=30}={}){
+export function createSearchPager(source,tags,sort,read,{pageSize=30,state=null}={}){
   validateOrTags(tags);
   const group=tags.find(t=>t.any&&!t.excluded),union=group&&(orStrategy(source)==='union'||source.kind==='danbooru'&&tags.some(t=>!t.any&&!t.value.includes(':')));
   const queries=union?group.any.map(value=>searchTags(source,tags.map(t=>t===group?{value,excluded:false}:t),sort)):[searchTags(source,tags,sort)];
@@ -373,7 +373,8 @@ export function createSearchPager(source,tags,sort,read,{pageSize=30}={}){
     if(/^\d+$/.test(a.id)&&/^\d+$/.test(b.id)){const x=BigInt(a.id),y=BigInt(b.id);return x===y?0:(x<y?-1:1)*(mode==='old'?1:-1);}
     return a.id.localeCompare(b.id)*(mode==='old'?1:-1);
   };
-  return {async next(count=pageSize){
+  if(state&&Array.isArray(state.branches)&&state.branches.length===queries.length&&state.branches.every((b,i)=>b.query===queries[i]&&Number.isInteger(b.page)&&b.page>=0&&Array.isArray(b.rows))){branches=state.branches.map(b=>({...b,rows:[...b.rows]}));seen=new Set(state.seen||[]);turn=state.turn||0;}
+  return {snapshot:()=>({branches:branches.map(b=>({...b,rows:[...b.rows]})),seen:[...seen],turn}),async next(count=pageSize){
     const snapshot=branches.map(b=>({...b,rows:[...b.rows]})),oldSeen=new Set(seen),oldTurn=turn;
     try{
       if(!union){const branch=branches[0];if(branch.done)return {items:[],done:true};const payload=await read(branch.query,branch.page,pageSize);const items=normalizePosts(payload,source);branch.page++;branch.done=postRows(payload).length<pageSize;return {items,done:branch.done};}

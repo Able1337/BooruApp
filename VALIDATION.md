@@ -36,3 +36,16 @@ The supplied BooruApp-source.zip is the baseline. Its structure and existing imp
 2. Run `npm test` and `bash scripts/build-apk.sh` with Android SDK 35 and build-tools 35.0.0.
 3. Install the signed APK; verify feed, tag search, image/video viewing, back navigation, favorites, JSON import/export and both interface modes. Check logcat for crashes and failures.
 4. Upload source, enable GitHub Pages with GitHub Actions as its source, and confirm both workflows complete. Download the APK artifact and compare its signing certificate to v0.1 before attempting an update.
+
+## Viewing regression checks (0.5.0)
+
+Run `npm test`, then the four browser scripts with an isolated Playwright 1.56.1 installation:
+
+```sh
+node scripts/ui-smoke.mjs
+node scripts/pwa-smoke.mjs
+node scripts/or-smoke.mjs
+node scripts/viewing-smoke.mjs
+```
+
+Set `PLAYWRIGHT_MODULE` to the Playwright module path and `PLAYWRIGHT_BROWSERS_PATH` if using a non-default browser location. CI runs the same scripts and uploads `build/ui/`. The viewing script writes `viewing-results.json` with DOM counts, first-media position and before/after post anchors. These are reproducible neutral-fixture browser checks, not physical-phone FPS, battery or usability measurements.

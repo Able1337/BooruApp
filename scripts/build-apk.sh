@@ -10,7 +10,7 @@ out="$PWD/build"
 mkdir -p "$out/classes" "$out/dex" "$out/assets/web"
 rm -rf "$out/classes" "$out/dex" "$out/assets"
 mkdir -p "$out/classes" "$out/dex" "$out/assets/web"
-cp web/index.html web/style.css web/app.mjs web/core.mjs web/sw.js web/manifest.webmanifest "$out/assets/web/"
+cp web/index.html web/style.css web/app.mjs web/core.mjs web/library.mjs web/viewing.mjs web/sw.js web/manifest.webmanifest "$out/assets/web/"
 cp -R web/icons "$out/assets/web/"
 "$bt/aapt2" compile --dir android/res -o "$out/resources.zip"
 "$bt/aapt2" link -o "$out/base.apk" -I "$platform" --manifest android/AndroidManifest.xml --min-sdk-version 26 --target-sdk-version 35 -A "$out/assets" "$out/resources.zip"
@@ -22,6 +22,7 @@ java com.sun.tools.javac.Main -encoding UTF-8 -source 8 -target 8 -classpath "$p
 cp "$out/base.apk" "$out/unsigned.apk"
 (cd "$out/dex" && zip -q "$out/unsigned.apk" classes*.dex)
 "$bt/zipalign" -f -p 4 "$out/unsigned.apk" "$out/aligned.apk"
+if [[ "${GITHUB_ACTIONS:-}" == "true" && -z "${BOORU_KEYSTORE:-}" ]]; then echo 'CI requires a persistent signing key; refusing a disposable APK signature.' >&2; exit 1; fi
 key="${BOORU_KEYSTORE:-$out/debug.keystore}"
 alias="${BOORU_KEY_ALIAS:-androiddebugkey}"
 export BOORU_KEYSTORE_PASSWORD="${BOORU_KEYSTORE_PASSWORD:-android}"

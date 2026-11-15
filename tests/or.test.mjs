@@ -42,3 +42,12 @@ test('four-way fallback bounds concurrent API calls and canonicalizes option ord
  assert.equal((await pager.next()).done,true);assert.equal(calls,4);assert.equal(peak,2);
  assert.deepEqual(parseTags('dog|cat'),parseTags('cat~dog'));
 });
+test('serialized union snapshots resume buffered branch rows and pagination without refetching',async()=>{
+ const read=async(query,page)=>query.includes('cat')?[[row(10),row(8)],[row(6)]][page]||[]:[[row(9),row(7)],[row(5)]][page]||[];
+ const tags=parseTags('animated {cat ~ dog}');const pager=createSearchPager(source('safebooru'),tags,'new',read,{pageSize:2});
+ assert.deepEqual((await pager.next(1)).items.map(p=>p.id),['10']);
+ const state=JSON.parse(JSON.stringify(pager.snapshot()));let calls=0;
+ const resumed=createSearchPager(source('safebooru'),tags,'new',async(...args)=>{calls++;return read(...args);},{pageSize:2,state});
+ assert.deepEqual((await resumed.next(2)).items.map(p=>p.id),['9','8']);assert.equal(calls,0);
+ assert.deepEqual((await resumed.next(3)).items.map(p=>p.id),['7','6','5']);assert.equal(calls,2);
+});

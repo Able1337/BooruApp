@@ -68,11 +68,11 @@ test('each booru section creates new collections preselected for that booru',asy
 });
 test('post tag clicks immediately include the tag and chips can then exclude it',async t=>{
  const app=await setup({server:true,fetcher:async()=>({ok:true,json:async()=>[{id:1,file_url:'https://example.org/sky.jpg',preview_url:'https://example.org/p.jpg',tags:'sky'}]})});t.after(app.cleanup);const{$,requests}=app;
- $('feedTab').click();await app.tick();const first=()=> $('grid').querySelector('.post-tags').children[0];
+ $('feedTab').click();await app.tick();const first=()=>{const details=$('grid').querySelector('.inline-tags');details.open=true;details.ontoggle();return details.querySelector('.post-tags').children[0];};
  first().click();await app.tick();assert.equal(new URL(JSON.parse(requests.at(-1).options.body).url).searchParams.get('tags'),'sky');
  $('selectedTags').children[0].querySelector('.exclude-toggle').click();await app.tick();assert.equal(new URL(JSON.parse(requests.at(-1).options.body).url).searchParams.get('tags'),'-sky');
- first().click();await app.tick();assert.equal(new URL(JSON.parse(requests.at(-1).options.body).url).searchParams.get('tags'),'sky');assert.equal($('selectedTags').children.length,1);
- $('gridView').click();$('grid').querySelector('.view-label').click();$('tags').querySelector('.post-tags').children[0].click();await app.tick();assert.equal($('viewer').open,false);assert.equal(new URL(JSON.parse(requests.at(-1).options.body).url).searchParams.get('tags'),'sky');
+ const before=requests.length;first().click();await app.tick();assert.equal(requests.length,before);assert.equal($('selectedTags').children[0].classList.contains('excluded'),false);assert.equal($('selectedTags').children.length,1);
+ $('gridView').click();$('grid').querySelector('.view-label').click();$('tags').querySelector('.post-tags').children[0].click();await app.tick();assert.equal($('viewer').open,false);assert.equal($('selectedTags').children[0].querySelector('.tag-name').textContent,'sky');
 });
 test('saved posts have separate booru sections and only individual original posts can be shared',async t=>{
  const media='https://example.org/a.jpg';const favorites=[{id:'1',key:'https://safebooru.org/#1',source:'Safebooru',file:media,preview:media,tags:['sky']},{id:'2',key:'https://e621.net/#2',source:'e621',file:media,preview:media,tags:['sky']}];
@@ -138,4 +138,27 @@ test('saved posts respect included and excluded OR groups locally',async t=>{
  const app=await setup({storage:{'bp.saved':saved}});t.after(app.cleanup);const{$}=app;
  $('query').value='animated cat~dog';$('searchForm').onsubmit({preventDefault(){}});await app.tick();$('savedTab').click();assert.equal($('grid').querySelectorAll('.post').length,2);
  const count=app.requests.length;$('selectedTags').querySelector('.or-chip').querySelector('.exclude-toggle').click();assert.equal($('grid').querySelectorAll('.post').length,1);assert.equal(app.requests.length,count);
+});
+test('collapsed tags create no links until expanded and a failed favorite write never changes the heart',async t=>{
+ const app=await setup({server:true,fetcher:async()=>({ok:true,json:async()=>[{id:1,file_url:'https://example.org/a.png',tags:'city sky'}]})});t.after(app.cleanup);const{$}=app;
+ $('feedTab').click();await app.tick();assert.equal($('grid').querySelectorAll('.post-tags').length,0);
+ const details=$('grid').querySelector('.inline-tags');details.open=true;details.ontoggle();assert.equal(details.querySelectorAll('a').length,2);
+ const original=globalThis.localStorage.setItem;globalThis.localStorage.setItem=(key,value)=>{if(key==='bp.saved')throw new Error('quota');return original(key,value);};
+ const heart=$('grid').querySelector('.favorite-button');heart.click();assert.equal(heart.textContent,'♡');assert.equal($('savedCount').textContent,'0');assert.match($('notice').textContent,/Не удалось сохранить/);
+});
+test('per-source exclusions apply to requests, explicit included tags override them, and filters can be bypassed',async t=>{
+ const app=await setup({server:true,storage:{'bp.reading':{quality:'preview',exclusions:{safebooru:'comic'}}},fetcher:async()=>({ok:true,json:async()=>[]})});t.after(app.cleanup);const{$}=app;
+ const tags=()=>new URL(JSON.parse(app.requests.at(-1).options.body).url).searchParams.get('tags');
+ $('query').value='city';$('searchForm').onsubmit({preventDefault(){}});await app.tick();assert.equal(tags(),'city -comic');
+ $('showHidden').click();await app.tick();assert.equal(tags(),'city');
+ $('showHidden').click();await app.tick();$('query').value='comic';$('searchForm').onsubmit({preventDefault(){}});await app.tick();assert.equal(tags(),'city comic');
+});
+test('changing the search aborts its previous fetch instead of waiting for its timeout',async t=>{
+ let oldSignal;
+ const app=await setup({server:true,fetcher:async(url,options)=>{
+   const tags=new URL(JSON.parse(options.body).url).searchParams.get('tags');
+   if(!tags){oldSignal=options.signal;return new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new DOMException('cancelled','AbortError')),{once:true}));}
+   return{ok:true,json:async()=>[{id:2,file_url:'https://example.org/2.png',tags}]};
+ }});t.after(app.cleanup);app.$('feedTab').click();app.$('query').value='city';app.$('searchForm').onsubmit({preventDefault(){}});await app.tick();
+ assert.equal(oldSignal.aborted,true);assert.equal(app.$('grid').querySelector('.post-id').textContent,'#2');
 });
