@@ -34,7 +34,3 @@ body{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset
 #grid{overflow-anchor:none}.post-media:has(.media-error)>img,.post-media:has(.media-error)>video{display:none}
 
 :root{--nav-height:68px}.topbar{position:sticky;top:0;z-index:22;background:#171b2bf5;backdrop-filter:blur(18px);transition:transform .2s ease}.topbar.scroll-hidden{transform:translateY(-100%);pointer-events:none}.search-panel{top:var(--nav-height)}.search-panel.scroll-hidden{transform:translateY(calc(-100% - var(--nav-height)));pointer-events:none}@media(max-width:600px){:root{--nav-height:55px}}
-/* The footer must not become the browser's scroll anchor when a page is appended. */
-body{overflow-anchor:none}
-
-.posts-grid{--post-columns:4}.posts-grid.stable-grid{columns:auto;display:flex;align-items:flex-start;gap:12px}.post-column{display:flex;flex:1;min-width:0;flex-direction:column;gap:12px}.posts-grid.stable-grid .post{display:block;margin:0}@media(min-width:1400px){.posts-grid{--post-columns:5}}@media(max-width:950px){.posts-grid{--post-columns:3}}@media(max-width:600px){.posts-grid{--post-columns:2}.posts-grid.stable-grid,.post-column{gap:9px}}

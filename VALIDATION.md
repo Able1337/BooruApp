@@ -46,9 +46,6 @@ node scripts/ui-smoke.mjs
 node scripts/pwa-smoke.mjs
 node scripts/or-smoke.mjs
 node scripts/viewing-smoke.mjs
-node scripts/pagination-smoke.mjs
 ```
 
 Set `PLAYWRIGHT_MODULE` to the Playwright module path and `PLAYWRIGHT_BROWSERS_PATH` if using a non-default browser location. CI runs the same scripts and uploads `build/ui/`. The viewing script writes `viewing-results.json` with DOM counts, first-media position and before/after post anchors. These are reproducible neutral-fixture browser checks, not physical-phone FPS, battery or usability measurements.
-
-Pagination checks exercise actual pointer and keyboard activation at the bottom in mobile/desktop list and tile views. They compare every visible existing card before and after two appended pages; `build/ui/pagination-results.json` records the measured shifts. Automatic sentinel loading is disabled in this scenario so the explicit button is exercised.

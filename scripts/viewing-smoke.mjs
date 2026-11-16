@@ -24,9 +24,8 @@ try{
  await page.locator('.inline-tags summary').first().click();await page.waitForFunction(()=>document.querySelectorAll('#grid .post-tags a').length===40);
  await page.locator('.inline-tags summary').first().click();
  for(let count=60;count<=300;count+=30){await page.evaluate(()=>document.getElementById('more').click());await page.waitForFunction(n=>document.querySelectorAll('#grid .post').length>=n,count);}
- await page.waitForTimeout(250);await page.locator('#grid .post').nth(120).scrollIntoViewIfNeeded();await page.waitForTimeout(750);
+ await page.locator('#grid .post').nth(120).scrollIntoViewIfNeeded();await page.waitForTimeout(750);
  const before=await page.evaluate(()=>{const n=[...document.querySelectorAll('#grid .post')].find(n=>n.getBoundingClientRect().bottom>0);return {key:n.dataset.postKey,top:n.getBoundingClientRect().top};});
- assert.ok(await page.evaluate(()=>scrollY>10000),'The history scenario must start deep in the feed');
  const original=page.url(),callsBefore=calls;
  await page.evaluate(()=>{document.getElementById('query').value='city';document.getElementById('searchForm').requestSubmit();});
  await page.waitForURL(u=>u.href!==original);await page.waitForFunction(()=>document.querySelectorAll('#grid .post').length===30);
