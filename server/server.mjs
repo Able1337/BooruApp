@@ -1,18 +1,13 @@
 import http from 'node:http';
 import {createMediaRelay} from './media.mjs';
 import {readFile} from 'node:fs/promises';
-import {realpathSync,readFileSync} from 'node:fs';
-import {createHash} from 'node:crypto';
+import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {isIP} from 'node:net';
 import {parseTagPayload,normalizeSuggestions} from '../web/core.mjs';
 
 const ROOT = fileURLToPath(new URL('../web/',import.meta.url));
-// Every shell change creates a distinct worker and cache, including deployments without a version bump.
-const shellHash=createHash('sha256');
-for(const file of ['index.html','app.mjs','core.mjs','library.mjs','viewing.mjs','style.css','sw.js','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','icons/icon-180.png'])shellHash.update(file).update(readFileSync(resolve(ROOT,file)));
-const SHELL_REVISION=shellHash.digest('hex').slice(0,16);
 const MAX_BODY = 16384, MAX_RESPONSE = 4 * 1024 * 1024;
 const HOSTS = new Set(['safebooru.org','api.rule34.xxx','gelbooru.com','danbooru.donmai.us','e621.net']);
 export function checkedTarget(value,operation='posts') {
@@ -58,7 +53,6 @@ export function checkedTarget(value,operation='posts') {
   return u.href;
 }
 function send(res,status,body,type='application/json; charset=utf-8') {
-  if(res.destroyed)return;
   res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"frame-ancestors 'none'"});
   res.end(typeof body==='string'||Buffer.isBuffer(body)?body:JSON.stringify(body));
 }
@@ -89,7 +83,7 @@ export function createApp({upstream=fetch,publicOrigin=process.env.PUBLIC_ORIGIN
         try{const body=await readBody(req);target=checkedTarget(body.url,req.url==='/api/tags'?'tags':'posts');}catch{return send(res,400,{error:'Недопустимый запрос API. Поддерживаются Safebooru, Rule34, Gelbooru, Danbooru и e621.'});}
         // Recheck after reading the body: multiple slow clients must not bypass the bound.
         if(active>=8)return send(res,503,{error:'Сервер занят. Повтори позже.'});
-        active++;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),25000);const disconnected=()=>{if(!res.writableEnded)controller.abort();};res.on('close',disconnected);
+        active++;
         try{
           const targetUrl=new URL(target);
           const headers={Accept:'application/json','User-Agent':'BooruPocket/0.3 (https://github.com/Able1337/BooruApp)'};
@@ -97,7 +91,7 @@ export function createApp({upstream=fetch,publicOrigin=process.env.PUBLIC_ORIGIN
             headers.Authorization='Basic '+Buffer.from(targetUrl.searchParams.get('login')+':'+targetUrl.searchParams.get('api_key')).toString('base64');
             targetUrl.searchParams.delete('login');targetUrl.searchParams.delete('api_key');
           }
-          const response=await upstream(targetUrl.href,{redirect:'error',signal:controller.signal,headers});
+          const response=await upstream(targetUrl.href,{redirect:'error',signal:AbortSignal.timeout(25000),headers});
           if(!response.ok){
             await response.body?.cancel();
             const errors={401:'API отклонил авторизацию. Проверь User ID и API key.',403:'Источник запретил запрос. Проверь ключ и доступ API.',429:'Превышен лимит источника. Подожди минуту.'};
@@ -109,14 +103,13 @@ export function createApp({upstream=fetch,publicOrigin=process.env.PUBLIC_ORIGIN
           try{if(req.url==='/api/tags')text=JSON.stringify(normalizeSuggestions(parseTagPayload(text)));else JSON.parse(text);}catch{return send(res,502,{error:'Источник вернул не JSON. Возможно, требуется проверка доступа на стороне источника.'});}
           return send(res,200,text);
         }catch(e){return send(res,502,{error:e.name==='TimeoutError'||e.name==='AbortError'?'Сервер не дождался API источника. Повтори позже.':'Сервер не смог получить ответ API источника.'});}
-        finally{clearTimeout(timeout);res.off('close',disconnected);active--;}
+        finally{active--;}
       }
       if(req.method!=='GET'&&req.method!=='HEAD')return send(res,405,{error:'Метод не поддерживается'});
-      const files={'/library.mjs':['library.mjs','text/javascript; charset=utf-8'],'/viewing.mjs':['viewing.mjs','text/javascript; charset=utf-8'],'/sw.js':['sw.js','text/javascript; charset=utf-8'],'/manifest.webmanifest':['manifest.webmanifest','application/manifest+json; charset=utf-8'],'/icons/icon-192.png':['icons/icon-192.png','image/png'],'/icons/icon-512.png':['icons/icon-512.png','image/png'],'/icons/icon-180.png':['icons/icon-180.png','image/png'],'/':['index.html','text/html; charset=utf-8'],'/index.html':['index.html','text/html; charset=utf-8'],'/app.mjs':['app.mjs','text/javascript; charset=utf-8'],'/core.mjs':['core.mjs','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
+      const files={'/sw.js':['sw.js','text/javascript; charset=utf-8'],'/manifest.webmanifest':['manifest.webmanifest','application/manifest+json; charset=utf-8'],'/icons/icon-192.png':['icons/icon-192.png','image/png'],'/icons/icon-512.png':['icons/icon-512.png','image/png'],'/icons/icon-180.png':['icons/icon-180.png','image/png'],'/':['index.html','text/html; charset=utf-8'],'/index.html':['index.html','text/html; charset=utf-8'],'/app.mjs':['app.mjs','text/javascript; charset=utf-8'],'/core.mjs':['core.mjs','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
       const entry=files[req.url?.split('?')[0]];
       if(!entry)return send(res,404,{error:'Страница не найдена'});
       let content=await readFile(resolve(ROOT,entry[0]));
-      if(entry[0]==='sw.js')content=content.toString('utf8').replace('booru-pocket-shell-v2','booru-pocket-shell-'+SHELL_REVISION);
       if(entry[0]==='index.html')content=content.toString('utf8').replace('<head>','<head><meta name="booru-api" content="same-origin">');
       return send(res,200,req.method==='HEAD'?'':content,entry[1]);
     }catch{return send(res,500,{error:'Ошибка сервера'});}

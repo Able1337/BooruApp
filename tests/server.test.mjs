@@ -49,10 +49,3 @@ test('PWA manifest, service worker and real PNG icons are served with correct ty
  for(const icon of manifest.icons){const r=await fetch(base+icon.src);assert.equal(r.status,200);assert.equal(r.headers.get('content-type'),'image/png');const bytes=Buffer.from(await r.arrayBuffer());assert.equal(bytes.subarray(0,8).toString('hex'),'89504e470d0a1a0a');assert.equal(bytes.readUInt32BE(16),Number(icon.sizes.split('x')[0]));}
  const sw=await fetch(base+'/sw.js');assert.equal(sw.status,200);assert.match(sw.headers.get('content-type'),/javascript/);assert.equal(sw.headers.get('cache-control'),'no-store');
 });
-test('disconnecting a browser cancels the corresponding upstream API request',async t=>{
- let started,aborted;const begun=new Promise(resolve=>{started=resolve;}),cancelled=new Promise(resolve=>{aborted=resolve;});
- const server=http.createServer(createApp({upstream:async(url,{signal})=>new Promise((resolve,reject)=>{signal.addEventListener('abort',()=>{aborted();reject(signal.reason);},{once:true});started();})}));
- server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>server.close());
- const controller=new AbortController();const request=fetch(`http://127.0.0.1:${server.address().port}/api/posts`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:target}),signal:controller.signal}).catch(error=>error);
- await begun;controller.abort();await Promise.race([cancelled,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(new Error('Upstream did not abort')),2000);timer.unref();})]);await request;
-});
