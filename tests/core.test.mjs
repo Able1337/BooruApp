@@ -180,3 +180,14 @@ test('obsolete factory collections are removed even from older imports without d
  const own={...obsolete,id:'own-gay'};
  const next=addCollectionPresets([obsolete,own],[source],['standard-pack-v2']);assert.ok(!next.collections.some(c=>c.id===obsolete.id));assert.ok(next.collections.some(c=>c.id===own.id));
 });
+
+test('e621 files format supports arrays and wrapped results without inventing missing media',()=>{
+ const source={name:'e621',base:'https://e621.net/',kind:'e621'};
+ const row={id:8,files:{meta:{ext:'webm'},original:{url:'https://static1.e621.net/data/a.webm',width:1200,height:700},preview:{jpg:'https://static1.e621.net/data/preview/a.jpg'},sample:{webp:'https://static1.e621.net/data/sample/a.webp'}},stats:{score:{total:19}},tags:{general:['sky']}};
+ for(const payload of [[row],{posts:[row]}]){
+  const [p]=normalizePosts(payload,source);
+  assert.equal(p.file,row.files.original.url);assert.equal(p.preview,row.files.preview.jpg);assert.equal(p.sample,row.files.sample.webp);
+  assert.equal(p.width,1200);assert.equal(p.height,700);assert.equal(p.score,19);assert.equal(p.video,true);
+ }
+ assert.deepEqual(normalizePosts([{...row,files:{}}],source),[]);
+});
