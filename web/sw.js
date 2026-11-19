@@ -1,5 +1,5 @@
 // Cache the interface only. API requests, keys and media never enter this cache.
-const CACHE='booru-pocket-shell-v2';
+const CACHE='booru-pocket-shell-v3';
 const SHELL=['/','/index.html','/app.mjs','/core.mjs','/style.css','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/icon-180.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL))));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{

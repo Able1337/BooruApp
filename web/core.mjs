@@ -50,7 +50,7 @@ export function normalizePosts(payload, source) {
     const preview = httpsUrl(p.preview_file_url || p.preview_url || p.preview?.url || p.sample?.url || p.sample_url || p.file_url || p.files?.preview?.jpg || p.files?.preview?.webp, source.base);
     const sample = httpsUrl(p.sample?.url || p.sample_url || p.large_file_url || p.file_url || p.file?.url || p.files?.sample?.jpg || p.files?.sample?.webp || p.files?.original?.url, source.base);
     const ext = String(p.file_ext || p.file?.ext || p.files?.meta?.ext || file.split('?')[0].split('.').pop() || '').toLowerCase();
-    const tags = p.tags&&typeof p.tags==='object'&&!Array.isArray(p.tags)?Object.values(p.tags).flat().filter(t=>typeof t==='string'):String(p.tag_string || p.tags || '').split(/\s+/).filter(Boolean);
+    const tags = Array.isArray(p.tags)?p.tags.filter(t=>typeof t==='string'&&t):p.tags&&typeof p.tags==='object'&&!Array.isArray(p.tags)?Object.values(p.tags).flat().filter(t=>typeof t==='string'):String(p.tag_string || p.tags || '').split(/\s+/).filter(Boolean);
     return {id:String(p.id), key:source.base+'#'+p.id, file, preview, sample:ext==='gif'?file:sample, tags, sourceId:source.id||'', tagGroups:normalizeTagGroups(p,tags), score:Number(p.score?.total??p.score??p.stats?.score?.total)||0, ext,
       width:Number(p.image_width || p.width || p.file?.width || p.files?.original?.width)||800, height:Number(p.image_height || p.height || p.file?.height || p.files?.original?.height)||1000,
       video:['mp4','webm'].includes(ext), rating:p.rating || '', source:source.name,

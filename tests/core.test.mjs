@@ -191,3 +191,11 @@ test('e621 files format supports arrays and wrapped results without inventing mi
  }
  assert.deepEqual(normalizePosts([{...row,files:{}}],source),[]);
 });
+
+test('e621 flat tag arrays stay separate and support tag matching',()=>{
+ const source={name:'e621',base:'https://e621.net/',kind:'e621'};
+ const [p]=normalizePosts([{id:9,file:{url:'https://example.org/a.jpg'},preview:{url:'https://example.org/p.jpg'},tags:['landscape','blue_sky','cloud',null,4,'']}],source);
+ assert.deepEqual(p.tags,['landscape','blue_sky','cloud']);
+ assert.deepEqual(p.tagGroups.general,p.tags);
+ assert.equal(p.tags.length,3);
+});
